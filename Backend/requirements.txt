@@ -1,0 +1,12 @@
+flask
+flask-cors
+pillow
+numpy
+opencv-python-headless
+scikit-learn
+joblib
+facenet-pytorch
+torch
+pymongo
+python-dotenv
+gunicorn
