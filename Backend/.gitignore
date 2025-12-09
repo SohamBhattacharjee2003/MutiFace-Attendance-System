@@ -1,3 +1,7 @@
 dataset_small
 Dockerfile
 .env
+.gitignore\
+__pycache__/
+*.pyc
+.gitignore

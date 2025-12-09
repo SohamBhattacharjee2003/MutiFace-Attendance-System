@@ -13,9 +13,15 @@ export default function CameraCapture({ onCapture }) {
     <div className="flex flex-col items-center space-y-4">
       <Webcam
         ref={ref}
+        width={480}
+        height={360}
         screenshotFormat="image/jpeg"
-        videoConstraints={{ facingMode: "user" }}
-        className="rounded-lg shadow-lg w-[320px]"
+        videoConstraints={{
+          width: 640,
+          height: 480,
+          facingMode: "user",
+        }}
+        className="rounded-lg shadow-lg"
       />
 
       <button

@@ -15,10 +15,16 @@ export default function Register() {
       return;
     }
 
-    const res = await axios.post("http://127.0.0.1:5000/register-student", {
-      name,
-      images,
-    });
+    console.log("Images being sent:", images.length);
+    console.log("First image sample:", images[0]?.substring(0, 50));
+
+    const res = await axios.post(
+      "http://127.0.0.1:5000/register-student",
+      { name, images },
+      {
+        headers: { "Content-Type": "application/json" },
+      }
+    );
 
     setMessage("Student registered successfully! Retrain model now.");
   };
