@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import Webcam from "react-webcam";
+import { motion } from "framer-motion";
 
 export default function CameraCapture({ onCapture }) {
   const ref = useRef(null);
@@ -10,26 +11,42 @@ export default function CameraCapture({ onCapture }) {
   };
 
   return (
-    <div className="flex flex-col items-center space-y-4">
-      <Webcam
-        ref={ref}
-        width={480}
-        height={360}
-        screenshotFormat="image/jpeg"
-        videoConstraints={{
-          width: 640,
-          height: 480,
-          facingMode: "user",
-        }}
-        className="rounded-lg shadow-lg"
-      />
+    <div className="flex flex-col items-center gap-6">
+      {/* CAMERA FEED */}
+      <div
+        className="
+          w-full overflow-hidden rounded-2xl 
+          border border-blue-500/20 
+          shadow-[0_0_25px_rgba(0,110,255,0.25)]
+        "
+      >
+        <Webcam
+          ref={ref}
+          mirrored
+          screenshotFormat="image/jpeg"
+          videoConstraints={{
+            width: 1280,
+            height: 720,
+            facingMode: "user",
+          }}
+          className="w-full rounded-2xl"
+        />
+      </div>
 
-      <button
+      {/* Capture Button */}
+      <motion.button
+        whileTap={{ scale: 0.95 }}
         onClick={capture}
-        className="px-6 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition"
+        className="
+          w-full py-4 
+          bg-blue-600 hover:bg-blue-700 
+          text-white text-lg font-semibold 
+          rounded-xl transition 
+          shadow-[0_0_25px_rgba(0,110,255,0.45)]
+        "
       >
         Capture Image
-      </button>
+      </motion.button>
     </div>
   );
 }

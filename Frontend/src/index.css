@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* GLOBAL BACKGROUND THEME */
 body {
-  @apply bg-gray-100 text-gray-900;
+  margin: 0;
+  padding: 0;
+  background-color: #070c24; /* PresenceAI dark theme */
+  color: white;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Helps avoid scrollbars when glows expand */
+html, body {
+  min-height: 100%;
+  overflow-x: hidden;
 }
