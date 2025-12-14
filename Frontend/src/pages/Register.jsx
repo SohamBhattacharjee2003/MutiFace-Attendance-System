@@ -1,13 +1,17 @@
 import React, { useState } from "react";
 import CameraCapture from "../components/CameraCapture";
-import axios from "axios";
+import { API } from "../utils/api";
+
 
 export default function Register() {
   const [name, setName] = useState("");
   const [images, setImages] = useState([]);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleCapture = (img) => setImages([...images, img]);
+  const handleCapture = (img) => {
+    setImages((prev) => [...prev, img]);
+  };
 
   const sendRegister = async () => {
     if (!name || images.length < 5) {
@@ -15,18 +19,26 @@ export default function Register() {
       return;
     }
 
-    console.log("Images being sent:", images.length);
-    console.log("First image sample:", images[0]?.substring(0, 50));
+    setLoading(true);
+    setMessage("");
 
-    const res = await axios.post(
-      "http://127.0.0.1:5000/register-student",
-      { name, images },
-      {
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    try {
+      const res = await API.post("/register/register-student", { name, images });
 
-    setMessage("Student registered successfully! Retrain model now.");
+      setMessage(res.data.message || "Student registered successfully!");
+      setImages([]);
+      setName("");
+    } catch (err) {
+      console.error("Register error:", err);
+      // Network errors won't have response; show message accordingly
+      const msg =
+        err.response?.data?.error ||
+        err.message ||
+        "Error registering student";
+      setMessage(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -45,18 +57,21 @@ export default function Register() {
           onChange={(e) => setName(e.target.value)}
           className="border p-2 rounded-lg w-64 shadow"
         />
+
         <button
           onClick={sendRegister}
-          className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow"
+          disabled={loading}
+          className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow disabled:opacity-50"
         >
-          Register
+          {loading ? "Registering..." : "Register"}
         </button>
       </div>
 
       <p className="text-center text-gray-700">{message}</p>
 
       <h4 className="text-center text-lg font-medium">
-        Captured Images: <span className="text-blue-600">{images.length}</span>
+        Captured Images:{" "}
+        <span className="text-blue-600">{images.length}</span>
       </h4>
     </div>
   );

@@ -1,110 +1,253 @@
-import React, { useState } from "react";
-import { motion } from "framer-motion";
-import CameraCapture from "../components/CameraCapture";
-import FaceBoxOverlay from "../components/FaceBoxOverlay";
-import axios from "axios";
+import React, { useRef, useEffect, useState } from "react";
+import { Camera, Square, StopCircle } from "lucide-react";
+import { predictFace } from "../utils/api";
 
 export default function LiveAttendance() {
-  const [faces, setFaces] = useState([]); // multiple face results
-  const [loading, setLoading] = useState(false);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [isAttendanceActive, setIsAttendanceActive] = useState(false);
+  const [detectedFaces, setDetectedFaces] = useState([]);
+  const [stream, setStream] = useState(null);
+  const intervalRef = useRef(null);
 
-  const handleFrame = async (img) => {
+  useEffect(() => {
+    startCamera();
+    return () => {
+      stopCamera();
+      stopAttendance();
+    };
+  }, []);
+
+  const startCamera = async () => {
     try {
-      const res = await axios.post("http://127.0.0.1:5001/predict", {
-        image: img,
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 },
       });
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+      setStream(mediaStream);
+    } catch (err) {
+      console.error("Camera error:", err);
+      alert("Could not access camera");
+    }
+  };
 
-      // backend returns { results: [...] }
-      setFaces(res.data.results || []);
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+  };
+
+  const startAttendance = () => {
+    setIsAttendanceActive(true);
+    setDetectedFaces([]);
+
+    intervalRef.current = setInterval(async () => {
+      await captureAndPredict();
+    }, 1000); // Check every second
+  };
+
+  const stopAttendance = () => {
+    setIsAttendanceActive(false);
+    setDetectedFaces([]);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  const captureAndPredict = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    const base64Image = canvas.toDataURL("image/jpeg", 0.8);
+
+    try {
+      const response = await predictFace(base64Image);
+      if (response?.results) {
+        setDetectedFaces(response.results);
+      }
     } catch (err) {
       console.error("Prediction error:", err);
     }
   };
 
+  const drawFaceBoxes = () => {
+    if (!videoRef.current || detectedFaces.length === 0) return null;
+
+    const video = videoRef.current;
+    const videoWidth = video.offsetWidth;
+    const videoHeight = video.offsetHeight;
+    const scaleX = videoWidth / video.videoWidth;
+    const scaleY = videoHeight / video.videoHeight;
+
+    return detectedFaces.map((face, index) => {
+      const [x1, y1, x2, y2] = face.box;
+      const left = x1 * scaleX;
+      const top = y1 * scaleY;
+      const width = (x2 - x1) * scaleX;
+      const height = (y2 - y1) * scaleY;
+
+      const isKnown = face.isKnown;
+      const color = isKnown ? "#10b981" : "#ef4444"; // Green for known, Red for unknown
+
+      return (
+        <div
+          key={index}
+          style={{
+            position: "absolute",
+            left: `${left}px`,
+            top: `${top}px`,
+            width: `${width}px`,
+            height: `${height}px`,
+            border: `3px solid ${color}`,
+            boxShadow: `0 0 10px ${color}`,
+            pointerEvents: "none",
+            zIndex: 10,
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: "-30px",
+              left: "0",
+              backgroundColor: "#070c24",
+              color: "white",
+              padding: "4px 12px",
+              borderRadius: "4px",
+              fontSize: "14px",
+              fontWeight: "600",
+              whiteSpace: "nowrap",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+            }}
+          >
+            {face.name} ({Math.round(face.confidence * 100)}%)
+          </div>
+        </div>
+      );
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-[#060b23] px-10 py-10 relative overflow-hidden">
+    <div className="min-h-screen bg-[#070c24] pt-20 pb-8 px-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="bg-[#070c24] rounded-lg shadow-md p-6 mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex items-center space-x-4">
+              <div className="bg-blue-600 p-3 rounded-lg">
+                <Camera className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl lg:text-3xl font-bold text-gray-300">
+                  Live Face Attendance
+                </h1>
+                <p className="text-gray-600 mt-1">
+                  {isAttendanceActive ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                      Detecting faces...
+                    </span>
+                  ) : (
+                    "Click Start to begin attendance"
+                  )}
+                </p>
+              </div>
+            </div>
 
-      {/* Background Glow Effects */}
-      <div className="absolute w-[700px] h-[700px] bg-blue-900/20 blur-[180px] -top-40 left-10 rounded-full"></div>
-      <div className="absolute w-[600px] h-[600px] bg-cyan-500/10 blur-[200px] bottom-0 right-0 rounded-full"></div>
-
-      <motion.h1
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-white text-4xl font-bold text-center mb-10"
-      >
-        Live <span className="text-blue-400">Attendance Scanner</span>
-      </motion.h1>
-
-      <div className="flex flex-col items-center justify-center">
-
-        {/* CAMERA SECTION */}
-        <div className="relative w-[720px] h-[520px] rounded-2xl overflow-hidden border border-blue-500/40 shadow-[0_0_30px_rgba(0,150,255,0.4)] bg-[#0a1130]/40 backdrop-blur-lg">
-
-          {/* CAMERA FEED */}
-          <CameraCapture onFrame={handleFrame} />
-
-          {/* FACE BOX OVERLAY (MULTIPLE FACES) */}
-          <FaceBoxOverlay faces={faces} />
-
-          {/* Scanning Animation */}
-          <div className="absolute inset-0 pointer-events-none opacity-40">
-            <div className="w-full h-full bg-[linear-gradient(transparent_90%,rgba(0,150,255,0.3)_100%)] animate-scan"></div>
+            {/* Control Buttons */}
+            <div className="flex space-x-3">
+              {!isAttendanceActive ? (
+                <button
+                  onClick={startAttendance}
+                  className="flex items-center space-x-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors shadow-md hover:shadow-lg font-medium"
+                >
+                  <Square className="w-5 h-5" />
+                  <span>Start Attendance</span>
+                </button>
+              ) : (
+                <button
+                  onClick={stopAttendance}
+                  className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors shadow-md hover:shadow-lg font-medium"
+                >
+                  <StopCircle className="w-5 h-5" />
+                  <span>Stop Attendance</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* RESULT PANEL */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-8 p-5 w-[720px] bg-white/10 border border-white/20 backdrop-blur-xl rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.2)]"
-        >
-          {faces.length > 0 ? (
-            <div>
-              {faces.map((f, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between px-4 py-2 border-b border-white/10"
-                >
-                  <div>
-                    <p className="text-white text-lg font-semibold">
-                      Name: <span className="text-blue-400">{f.name}</span>
-                    </p>
-                    <p className="text-white text-sm opacity-80">
-                      Confidence: {(f.confidence * 100).toFixed(1)}%
-                    </p>
-                  </div>
+        {/* Video Feed with Face Detection */}
+        <div className="bg-[#070c24] rounded-lg shadow-md p-6">
+          <div className="relative w-full overflow-hidden rounded-lg" style={{ aspectRatio: "16/9" }}>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full bg-gray-900 object-cover"
+            />
+            {isAttendanceActive && (
+              <div className="absolute inset-0 pointer-events-none">
+                {drawFaceBoxes()}
+              </div>
+            )}
+          </div>
+          <canvas ref={canvasRef} className="hidden" />
 
-                  <motion.div
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ repeat: Infinity, duration: 1.5 }}
-                    className="px-5 py-2 bg-green-600 rounded-lg text-white text-lg font-bold shadow-[0_0_15px_rgba(0,255,0,0.5)]"
-                  >
-                    PRESENT
-                  </motion.div>
-                </div>
-              ))}
+          {/* Legend */}
+          {isAttendanceActive && (
+            <div className="mt-6 flex items-center justify-center space-x-8 pb-4 border-b">
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-green-500 rounded"></div>
+                <span className="text-sm font-medium text-gray-700">
+                  Known Person
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-red-500 rounded"></div>
+                <span className="text-sm font-medium text-gray-700">
+                  Unknown Person
+                </span>
+              </div>
             </div>
-          ) : (
-            <p className="text-white text-center opacity-60">
-              No face detected… scanning...
-            </p>
           )}
-        </motion.div>
-      </div>
 
-      {/* SCANNING ANIMATION */}
-      <style>
-        {`
-          @keyframes scan {
-            0% { background-position-y: 0; }
-            100% { background-position-y: 520px; }
-          }
-          .animate-scan {
-            animation: scan 3s linear infinite;
-          }
-        `}
-      </style>
+          {/* Detection Stats */}
+          {isAttendanceActive && detectedFaces.length > 0 && (
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                <p className="text-3xl font-bold text-blue-600">
+                  {detectedFaces.length}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">Total Faces Detected</p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                <p className="text-3xl font-bold text-green-600">
+                  {detectedFaces.filter((f) => f.isKnown).length}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">Known Persons</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                <p className="text-3xl font-bold text-red-600">
+                  {detectedFaces.filter((f) => !f.isKnown).length}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">Unknown Persons</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

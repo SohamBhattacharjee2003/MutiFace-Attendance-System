@@ -7,14 +7,14 @@ import RegisterStudent from "./pages/RegisterStudent";
 import LiveAttendance from "./pages/LiveAttendance";
 import Attendance from "./pages/Attendance";
 import StudentList from "./pages/StudentList";
-import Settings from "./pages/Settings";
+import AttendanceRecords from "./pages/Attendance_Records";
 
 // Navbar
 import Navbar from "./components/Navbar";
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/">
       <Routes>
         {/* ---- LOGIN PAGE (NO NAVBAR) ---- */}
         <Route path="/" element={<Login />} />
@@ -71,11 +71,11 @@ export default function App() {
         />
 
         <Route
-          path="/settings"
+          path="/attendance-records"
           element={
             <>
               <Navbar />
-              <Settings />
+              <AttendanceRecords />
             </>
           }
         />

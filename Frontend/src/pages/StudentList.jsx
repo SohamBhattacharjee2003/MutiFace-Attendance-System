@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import StudentCard from "../components/StudentCard";
+import { RefreshCw, Plus, Camera } from "lucide-react";
 import axios from "axios";
+import AddImagesModal from "../components/AddImagesModal";
 
 export default function StudentList() {
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [showAddImagesModal, setShowAddImagesModal] = useState(false);
 
   useEffect(() => {
     fetchStudents();
@@ -13,75 +16,156 @@ export default function StudentList() {
 
   const fetchStudents = async () => {
     try {
-      const res = await axios.get("http://127.0.0.1:5001/students");
+      const res = await axios.get("http://127.0.0.1:5000/students");
       setStudents(res.data);
     } catch (err) {
       console.error("Error loading students:", err);
     }
   };
 
+  const handleAddImages = (student) => {
+    setSelectedStudent(student);
+    setShowAddImagesModal(true);
+  };
+
+  const handleModalClose = () => {
+    setShowAddImagesModal(false);
+    setSelectedStudent(null);
+    fetchStudents(); // Refresh the list
+  };
+
   return (
-    <div className="min-h-screen bg-[#060b23] px-12 py-10 relative overflow-hidden">
+    <div className="min-h-screen bg-[#060b23] px-6 md:px-12 py-10 pt-24 text-white">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+        <motion.h1
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-3xl md:text-4xl font-bold mb-4 md:mb-0"
+        >
+          Student <span className="text-blue-400">List</span>
+        </motion.h1>
 
-      {/* Background Lights */}
-      <div className="absolute w-[600px] h-[600px] bg-blue-900/20 blur-[200px] -top-20 left-10 rounded-full"></div>
-      <div className="absolute w-[500px] h-[500px] bg-cyan-600/10 blur-[200px] bottom-0 right-10 rounded-full"></div>
-
-      {/* Page Title */}
-      <motion.h1
-        initial={{ opacity: 0, y: -12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-white text-4xl font-bold mb-10"
-      >
-        Student <span className="text-blue-400">Directory</span>
-      </motion.h1>
-
-      {/* TOP BAR */}
-      <div className="flex justify-between items-center mb-8">
-
-        {/* SEARCH BAR */}
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search students..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="bg-white/10 text-white px-6 py-3 w-80 rounded-xl border border-white/20 backdrop-blur-xl 
-                       focus:outline-none focus:border-blue-400 transition"
-          />
-          <span className="absolute right-4 top-3 text-blue-300">🔍</span>
-        </div>
-
-        {/* TOTAL COUNT */}
-        <div className="text-white opacity-80 text-lg">
-          Total Students: <span className="text-blue-400">{students.length}</span>
-        </div>
-
-        {/* ADD STUDENT BUTTON */}
-        <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl text-white shadow-[0_0_15px_rgba(0,150,255,0.5)]">
-          + Add Student
+        <button
+          onClick={fetchStudents}
+          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors w-fit"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>Refresh</span>
         </button>
       </div>
 
-      {/* GRID OF STUDENT CARDS */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-7"
-      >
+      {/* Search */}
+      <div className="mb-8">
+        <input
+          type="text"
+          placeholder="Search student..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full md:w-80 px-5 py-3 rounded-xl bg-white/10 border border-white/20 focus:outline-none focus:border-blue-400 transition-colors"
+        />
+      </div>
+
+      {/* Student Count */}
+      <p className="text-gray-400 mb-6">
+        Showing{" "}
         {students
           .filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
-          .map((student, idx) => (
+          .length}{" "}
+        of {students.length} students
+      </p>
+
+      {/* Student Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {students
+          .filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
+          .map((student, i) => (
             <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 15 }}
+              key={i}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.05 }}
+              transition={{ delay: i * 0.05 }}
+              className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 hover:border-blue-400/50 transition-all"
             >
-              <StudentCard student={student} />
+              {/* Avatar */}
+              <div className="w-16 h-16 mb-4 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center text-2xl font-bold shadow-lg">
+                {student.name[0].toUpperCase()}
+              </div>
+
+              <h3 className="text-xl font-semibold mb-2">{student.name}</h3>
+
+              <p className="text-gray-400 mb-1">
+                Training Images:{" "}
+                <span className="text-blue-400 font-semibold">
+                  {student.samples || 0}
+                </span>
+              </p>
+
+              {/* Quality Indicator */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <span>Quality</span>
+                  <span className="font-semibold">
+                    {student.samples >= 15
+                      ? "Excellent"
+                      : student.samples >= 10
+                      ? "Good"
+                      : student.samples >= 5
+                      ? "Fair"
+                      : "Poor"}
+                  </span>
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-1.5">
+                  <div
+                    className={`h-1.5 rounded-full transition-all ${
+                      student.samples >= 15
+                        ? "bg-green-500"
+                        : student.samples >= 10
+                        ? "bg-blue-500"
+                        : student.samples >= 5
+                        ? "bg-yellow-500"
+                        : "bg-red-500"
+                    }`}
+                    style={{
+                      width: `${Math.min((student.samples / 15) * 100, 100)}%`,
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Add Images Button */}
+              <button
+                onClick={() => handleAddImages(student)}
+                className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Images</span>
+              </button>
+
+              {/* Warning */}
+              {student.samples < 10 && (
+                <p className="mt-3 text-xs text-center text-amber-400">
+                  ⚠️ Add {10 - student.samples} more for better accuracy
+                </p>
+              )}
             </motion.div>
           ))}
-      </motion.div>
+      </div>
+
+      {/* Empty State */}
+      {students.filter((s) => s.name.toLowerCase().includes(search.toLowerCase())).length === 0 && (
+        <div className="text-center py-16">
+          <Camera className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+          <p className="text-gray-400 text-lg">
+            {search ? "No students found matching your search" : "No students registered yet"}
+          </p>
+        </div>
+      )}
+
+      {/* Add Images Modal */}
+      {showAddImagesModal && (
+        <AddImagesModal student={selectedStudent} onClose={handleModalClose} />
+      )}
     </div>
   );
 }

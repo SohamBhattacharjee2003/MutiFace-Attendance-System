@@ -13,7 +13,7 @@ export default function Records() {
 
   const fetchRecords = async () => {
     try {
-      const res = await axios.get("http://127.0.0.1:5001/attendance");
+      const res = await axios.get("http://127.0.0.1:5000/attendance");
       setRecords(res.data);
     } catch (err) {
       console.error("Error loading attendance:", err);
@@ -45,7 +45,7 @@ export default function Records() {
   });
 
   return (
-    <div className="min-h-screen bg-[#060b23] px-12 py-10 relative overflow-hidden">
+    <div className="min-h-screen bg-[#060b23] px-6 md:px-12 pt-24 pb-10 relative overflow-hidden">
 
       {/* Background Glow */}
       <div className="absolute w-[650px] h-[650px] bg-blue-900/20 blur-[200px] -top-20 left-20 rounded-full"></div>
@@ -61,7 +61,7 @@ export default function Records() {
       </motion.h1>
 
       {/* Top Controls */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between mb-8 gap-4">
 
         {/* Search */}
         <input

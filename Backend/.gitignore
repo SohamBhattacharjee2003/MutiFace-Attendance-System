@@ -5,3 +5,6 @@ Dockerfile
 __pycache__/
 *.pyc
 .gitignore
+.embeddings
+embeddings/
+Backend/embeddings/

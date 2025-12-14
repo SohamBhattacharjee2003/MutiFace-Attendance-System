@@ -14,7 +14,7 @@ export default function Navbar() {
     { name: "Live Attendance", path: "/live" },
     { name: "Attendance Logs", path: "/attendance" },
     { name: "Students List", path: "/students" },
-    { name: "Settings", path: "/settings" },
+    { name: "Attendance Report", path: "/attendance-records" },
   ];
 
   return (
@@ -36,7 +36,7 @@ export default function Navbar() {
           <motion.img
             src={logo}
             alt="PresenceAI"
-            className="w-16 h-12 rounded-xl shadow-[0_0_12px_rgba(0,140,255,0.7)]"
+            className="w-18 h-12 rounded-xl shadow-[0_0_12px_rgba(0,140,255,0.7)]"
             whileHover={{ scale: 1.08 }}
           />
 

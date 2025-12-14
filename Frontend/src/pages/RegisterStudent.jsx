@@ -21,7 +21,7 @@ export default function RegisterStudent() {
 
     setLoading(true);
     try {
-      await axios.post("http://127.0.0.1:5001/register-student", {
+      await axios.post("http://127.0.0.1:5000/register/register-student", {
         name,
         images,
       });
@@ -37,7 +37,7 @@ export default function RegisterStudent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#060b23] px-10 py-10 relative overflow-hidden">
+    <div className="min-h-screen bg-[#060b23] px-6 md:px-10 pt-24 pb-10 relative overflow-hidden">
 
       {/* Background Glow */}
       <div className="absolute w-[900px] h-[900px] bg-blue-900/20 blur-[200px] -top-40 -left-40 rounded-full"></div>

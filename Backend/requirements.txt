@@ -10,3 +10,6 @@ torch
 pymongo
 python-dotenv
 gunicorn
+mtcnn
+insightface
+onnxruntime
