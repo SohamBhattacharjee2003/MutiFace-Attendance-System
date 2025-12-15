@@ -21,7 +21,7 @@ export default function RegisterStudent() {
 
     setLoading(true);
     try {
-      await axios.post("http://127.0.0.1:5000/register/register-student", {
+      await axios.post("http://127.0.0.1:5000/register", {
         name,
         images,
       });
