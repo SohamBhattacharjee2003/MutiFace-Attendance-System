@@ -13,3 +13,5 @@ gunicorn
 mtcnn
 insightface
 onnxruntime
+bcrypt
+pyjwt

@@ -1,12 +1,53 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaUser, FaLock } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import { login, signup } from "../utils/api";
 
 export default function Login() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const result = await login(email, pass);
+      console.log("✅ Login successful:", result);
+      // Navigate to dashboard after successful login
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Login failed. Please try again.");
+      console.error("Login error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const result = await signup(name, email, pass);
+      console.log("✅ Signup successful:", result);
+      // Navigate to dashboard after successful signup
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Signup failed. Please try again.");
+      console.error("Signup error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="h-screen w-full bg-[#060b23] flex items-center justify-center relative overflow-hidden">
@@ -75,6 +116,17 @@ export default function Login() {
               : "Create your new PresenceAI account."}
           </p>
 
+          {/* === Error Message === */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 text-sm text-center"
+            >
+              {error}
+            </motion.div>
+          )}
+
           {/* === Toggle Buttons === */}
           <div className="flex mb-10 gap-2 bg-white/10 p-1 rounded-lg">
             <button
@@ -104,23 +156,25 @@ export default function Login() {
           <AnimatePresence mode="wait">
             {/* ---- LOGIN ---- */}
             {mode === "login" ? (
-              <motion.div
+              <motion.form
                 key="loginForm"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ duration: 0.25 }}
                 className="flex flex-col gap-8"
+                onSubmit={handleLogin}
               >
-                {/* Username */}
+                {/* Email */}
                 <div className="relative border-b border-white/30 flex items-center gap-4 pb-3">
                   <FaUser className="text-white/50 text-xl" />
                   <input
-                    type="text"
+                    type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-transparent outline-none text-white text-lg"
-                    placeholder="Username"
+                    placeholder="Email"
+                    required
                   />
                 </div>
 
@@ -133,6 +187,7 @@ export default function Login() {
                     onChange={(e) => setPass(e.target.value)}
                     className="w-full bg-transparent outline-none text-white text-lg"
                     placeholder="Password"
+                    required
                   />
                 </div>
 
@@ -141,21 +196,25 @@ export default function Login() {
                 </a>
 
                 <button
+                  type="submit"
+                  disabled={loading}
                   className="w-full p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg 
-                                   transition font-semibold shadow-[0_0_20px_rgba(0,110,255,0.6)]"
+                                   transition font-semibold shadow-[0_0_20px_rgba(0,110,255,0.6)]
+                                   disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Login
+                  {loading ? "Logging in..." : "Login"}
                 </button>
-              </motion.div>
+              </motion.form>
             ) : (
               /* ---- SIGNUP ---- */
-              <motion.div
+              <motion.form
                 key="signupForm"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.25 }}
                 className="flex flex-col gap-8"
+                onSubmit={handleSignup}
               >
                 {/* Full Name */}
                 <div className="relative border-b border-white/30 flex items-center gap-4 pb-3">
@@ -166,6 +225,7 @@ export default function Login() {
                     onChange={(e) => setName(e.target.value)}
                     className="w-full bg-transparent outline-none text-white text-lg"
                     placeholder="Full Name"
+                    required
                   />
                 </div>
 
@@ -173,11 +233,12 @@ export default function Login() {
                 <div className="relative border-b border-white/30 flex items-center gap-4 pb-3">
                   <FaUser className="text-white/50 text-xl" />
                   <input
-                    type="text"
+                    type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-transparent outline-none text-white text-lg"
                     placeholder="Email"
+                    required
                   />
                 </div>
 
@@ -190,16 +251,21 @@ export default function Login() {
                     onChange={(e) => setPass(e.target.value)}
                     className="w-full bg-transparent outline-none text-white text-lg"
                     placeholder="Password"
+                    required
+                    minLength={6}
                   />
                 </div>
 
                 <button
+                  type="submit"
+                  disabled={loading}
                   className="w-full p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg 
-                                   transition font-semibold shadow-[0_0_20px_rgba(0,110,255,0.6)]"
+                                   transition font-semibold shadow-[0_0_20px_rgba(0,110,255,0.6)]
+                                   disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create Account
+                  {loading ? "Creating Account..." : "Create Account"}
                 </button>
-              </motion.div>
+              </motion.form>
             )}
           </AnimatePresence>
         </motion.div>

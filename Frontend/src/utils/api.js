@@ -12,6 +12,120 @@ export const checkHealth = async () => {
   }
 };
 
+// ==================== AUTH API ====================
+
+// User Signup
+export const signup = async (name, email, password) => {
+  try {
+    const response = await fetch(`${API_URL}/api/auth/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || `Signup failed: ${response.status}`);
+    }
+
+    // Store token in localStorage
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+    }
+
+    return data;
+  } catch (error) {
+    console.error("❌ Signup error:", error);
+    throw error;
+  }
+};
+
+// User Login
+export const login = async (email, password) => {
+  try {
+    const response = await fetch(`${API_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || `Login failed: ${response.status}`);
+    }
+
+    // Store token in localStorage
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+    }
+
+    return data;
+  } catch (error) {
+    console.error("❌ Login error:", error);
+    throw error;
+  }
+};
+
+// Verify Token
+export const verifyToken = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("No token found");
+
+    const response = await fetch(`${API_URL}/api/auth/verify`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      throw new Error("Token verification failed");
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("❌ Token verification error:", error);
+    throw error;
+  }
+};
+
+// Get Current User
+export const getCurrentUser = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("No token found");
+
+    const response = await fetch(`${API_URL}/api/auth/me`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to get user data");
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("❌ Get user error:", error);
+    throw error;
+  }
+};
+
+// Logout
+export const logout = () => {
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+};
+
 // Register new student
 export const registerStudent = async (name, images) => {
   try {

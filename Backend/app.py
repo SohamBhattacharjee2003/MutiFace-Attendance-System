@@ -15,6 +15,7 @@ from face_recognition.embedder import Embedder
 from face_recognition.recognizer import recognize
 
 from routes.register import register_bp
+from routes.auth import auth_bp
 
 # -----------------------------
 # Load environment variables
@@ -41,6 +42,7 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 # Register blueprints
+app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(register_bp)
 
 # -----------------------------
