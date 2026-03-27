@@ -1,0 +1,11 @@
+kagglehub
+python-dotenv
+torch
+torchvision
+opencv-python
+mtcnn
+numpy
+scikit-learn
+matplotlib
+tqdm
+Pillow
