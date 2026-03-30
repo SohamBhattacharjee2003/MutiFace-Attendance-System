@@ -20,6 +20,8 @@ from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report, confusion_matrix
 import joblib
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # ── Config ────────────────────────────────────────────────────────────────────
 ENCODINGS_FILE = "encodings/encodings.pkl"
@@ -95,9 +97,50 @@ def train(classifier_type):
     accuracy = (y_pred == y_test).mean()
     print(f"Test Accuracy: {accuracy * 100:.2f}%\n")
     print("Classification Report:")
-    print(classification_report(y_test, y_pred, target_names=le.classes_))
+    report_str = classification_report(y_test, y_pred, target_names=le.classes_)
+    report_dict = classification_report(y_test, y_pred, target_names=le.classes_, output_dict=True)
+    print(report_str)
     print("Confusion Matrix:")
-    print(confusion_matrix(y_test, y_pred))
+    cm = confusion_matrix(y_test, y_pred)
+    print(cm)
+
+    try:
+        # Plotting Confusion Matrix
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=le.classes_, yticklabels=le.classes_)
+        plt.title(f'{classifier_type.upper()} Confusion Matrix\nTest Accuracy: {accuracy * 100:.2f}%')
+        plt.ylabel('True Label')
+        plt.xlabel('Predicted Label')
+        plt.tight_layout()
+        cm_path = os.path.join(MODELS_DIR, f"{classifier_type}_confusion_matrix.png")
+        plt.savefig(cm_path)
+        plt.close()
+
+        # Plotting Classification Report
+        classes = list(le.classes_)
+        metrics = ['precision', 'recall', 'f1-score']
+        data = {metric: [report_dict[cls][metric] for cls in classes] for metric in metrics}
+        
+        x = np.arange(len(classes))
+        width = 0.25
+        
+        fig, ax = plt.subplots(figsize=(12, 6))
+        for i, metric in enumerate(metrics):
+            ax.bar(x + i * width, data[metric], width, label=metric)
+        
+        ax.set_ylabel('Scores (0.0 to 1.0)')
+        ax.set_title(f'{classifier_type.upper()} Classification Report Metrics')
+        ax.set_xticks(x + width)
+        ax.set_xticklabels(classes, rotation=45, ha='right')
+        ax.legend()
+        plt.ylim(0, 1.1)
+        plt.tight_layout()
+        cr_path = os.path.join(MODELS_DIR, f"{classifier_type}_classification_report.png")
+        plt.savefig(cr_path)
+        plt.close()
+        print(f"\n✅ Plots saved        → {cm_path}, {cr_path}")
+    except Exception as e:
+        print(f"\n⚠️ Failed to generate plots: {e}. Please ensure matplotlib and seaborn are installed.")
 
     # Save
     joblib.dump(pipeline, MODEL_OUT)
