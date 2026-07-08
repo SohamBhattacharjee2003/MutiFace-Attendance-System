@@ -36,7 +36,7 @@ def get_log_path():
     return os.path.join(LOGS_DIR, f"attendance_{datetime.now().strftime('%Y-%m-%d')}.csv")
 
 
-def log_attendance(student_id, cam_idx, log_path, logged_set, lock):
+def log_attendance(student_id, cam_idx, confidence, log_path, logged_set, lock):
     """Mark a student present — thread-safe, logs only once per session."""
     with lock:
         if student_id in logged_set:
@@ -49,8 +49,8 @@ def log_attendance(student_id, cam_idx, log_path, logged_set, lock):
         with open(log_path, "a", newline="") as f:
             writer = csv.writer(f)
             if not file_exists:
-                writer.writerow(["StudentID", "Timestamp", "Camera"])
-            writer.writerow([student_id, timestamp, f"Camera_{cam_idx}"])
+                writer.writerow(["StudentID", "Timestamp", "Camera", "Confidence"])
+            writer.writerow([student_id, timestamp, f"Camera_{cam_idx}", f"{confidence:.4f}"])
 
     print(f"[✅ Attendance] {student_id} marked PRESENT at {timestamp} via Camera {cam_idx}")
 
@@ -104,7 +104,7 @@ def capture_thread(cam_idx, pipeline, le, log_path,
                 if best_conf >= CONFIDENCE_THRESHOLD:
                     student_id = le.inverse_transform([best_idx])[0]
                     label      = f"{student_id} ({best_conf * 100:.1f}%)"
-                    log_attendance(student_id, cam_idx, log_path,
+                    log_attendance(student_id, cam_idx, best_conf, log_path,
                                    logged_set, log_lock)
                 else:
                     label = "Unknown"

@@ -1,0 +1,25 @@
+{
+  "model": "ArcFace R50 (buffalo_l) + linear SVM",
+  "embedding_dim": 512,
+  "identities": 97,
+  "images_embedded": 2425,
+  "train_size": 1697,
+  "test_size": 728,
+  "identification": {
+    "accuracy": 0.9175824175824175,
+    "precision_macro": 0.9371721491566852,
+    "recall_macro": 0.9178939617083948,
+    "f1_macro": 0.9189304301220127,
+    "precision_weighted": 0.9367372801953846,
+    "recall_weighted": 0.9175824175824175,
+    "f1_weighted": 0.9185782244080748
+  },
+  "verification": {
+    "auc": 0.9641369047619047,
+    "eer": 0.1030505952380952,
+    "threshold_at_eer": 0.10103979706764221,
+    "verification_accuracy": 0.9009628610729024,
+    "n_pairs": 2908,
+    "positive_pairs": 28
+  }
+}

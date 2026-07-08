@@ -1,0 +1,7 @@
+[
+  {
+    "name": "Admin",
+    "email": "admin@presence.ai",
+    "password_hash": "scrypt:32768:8:1$E6jtPqBnWUCC616Z$3ec9dc3f05fea9f140a67472b598642411df64ba91f235ed1d15e07d52041407caaccff245ff5442973de988668eed79f819163a6b03a45ab630f221671c6caf"
+  }
+]

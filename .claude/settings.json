@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf MutiFace-Attendance-System)",
+      "Bash(gh repo *)",
+      "Bash(pkill -9 -f \"api.py\")",
+      "Bash(xargs kill -9)",
+      "Bash(curl -s --max-time 2 http://127.0.0.1:5000/health)"
+    ]
+  }
+}
