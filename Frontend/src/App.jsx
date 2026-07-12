@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 // Pages
+import Home from "./pages/Home";
 import Login from "./pages/Login";
+import Research from "./pages/Research";
 import Dashboard from "./pages/Dashboard";
 import RegisterStudent from "./pages/RegisterStudent";
 import LiveAttendance from "./pages/LiveAttendance";
@@ -16,8 +18,10 @@ export default function App() {
   return (
     <BrowserRouter basename="/">
       <Routes>
-        {/* ---- LOGIN PAGE (NO NAVBAR) ---- */}
-        <Route path="/" element={<Login />} />
+        {/* ---- PUBLIC PAGES (NO NAVBAR) ---- */}
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/research" element={<Research />} />
 
         {/* ---- PAGES WITH NAVBAR ---- */}
         <Route

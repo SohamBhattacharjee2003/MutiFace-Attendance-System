@@ -18,10 +18,10 @@ axios.interceptors.request.use((config) => {
 // An expired or missing token means the session is over — send the user back to the login
 // page rather than leaving every page silently empty.
 //
-// The login screen is mounted at "/" (see App.jsx), NOT at "/login". Redirecting to
-// "/login" lands on a route that does not exist, and the guard below must compare against
-// the real path or it redirects forever.
-const LOGIN_PATH = "/";
+// The login screen is mounted at "/login" (see App.jsx); "/" is the public landing page.
+// This constant MUST track that route: pointing it at a path that does not exist silently
+// wipes the token and redirects nowhere, and every later request 401s.
+const LOGIN_PATH = "/login";
 
 axios.interceptors.response.use(
   (response) => response,
