@@ -1,5 +1,17 @@
 const API_URL = "http://localhost:5000";
 
+// Every data endpoint on the backend now requires a Bearer token. Attendance is the
+// thing people have an incentive to cheat, and these routes used to be wide open —
+// anyone on the same network could mark themselves present or delete a student.
+const authHeaders = (extra = {}) => {
+  const token = localStorage.getItem("token");
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
+
 // Health check
 export const checkHealth = async () => {
   try {
@@ -131,7 +143,7 @@ export const registerStudent = async (name, images) => {
   try {
     const response = await fetch(`${API_URL}/register`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ name, images }),
     });
     
@@ -152,7 +164,7 @@ export const predictFace = async (imageBase64) => {
   try {
     const response = await fetch(`${API_URL}/predict`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ image: imageBase64 }),
     });
     
@@ -172,7 +184,7 @@ export const predictFace = async (imageBase64) => {
 // Get attendance records
 export const getAttendance = async () => {
   try {
-    const response = await fetch(`${API_URL}/attendance`);
+    const response = await fetch(`${API_URL}/attendance`, { headers: authHeaders() });
     if (!response.ok) throw new Error(`Failed to fetch attendance: ${response.status}`);
     
     const data = await response.json();
@@ -187,7 +199,7 @@ export const getAttendance = async () => {
 // Get students list
 export const getStudents = async () => {
   try {
-    const response = await fetch(`${API_URL}/students`);
+    const response = await fetch(`${API_URL}/students`, { headers: authHeaders() });
     if (!response.ok) throw new Error(`Failed to fetch students: ${response.status}`);
     
     const data = await response.json();
@@ -202,7 +214,7 @@ export const getStudents = async () => {
 // Get valid student names (with embeddings)
 export const getValidStudentNames = async () => {
   try {
-    const response = await fetch(`${API_URL}/students/valid-names`);
+    const response = await fetch(`${API_URL}/students/valid-names`, { headers: authHeaders() });
     if (!response.ok) throw new Error(`Failed to fetch valid names: ${response.status}`);
     
     const data = await response.json();
@@ -214,12 +226,26 @@ export const getValidStudentNames = async () => {
   }
 };
 
+// Training status — poll after registering; status goes "training" -> "done".
+// A student is only recognizable once the retrain that follows their registration
+// reaches "done"; until then /predict still returns "Unknown" for them.
+export const getTrainingStatus = async () => {
+  try {
+    const response = await fetch(`${API_URL}/train/status`, { headers: authHeaders() });
+    if (!response.ok) throw new Error(`Failed to fetch training status: ${response.status}`);
+    return response.json();
+  } catch (error) {
+    console.error("❌ Training status error:", error);
+    throw error;
+  }
+};
+
 // Update student with more images
 export const updateStudent = async (name, images) => {
   try {
     const response = await fetch(`${API_URL}/update-student`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ name, images }),
     });
     
@@ -259,6 +285,7 @@ export const clearAttendance = async () => {
   try {
     const response = await fetch(`${API_URL}/attendance/clear`, {
       method: "DELETE",
+      headers: authHeaders(),
     });
     
     if (!response.ok) throw new Error(`Clear attendance failed: ${response.status}`);

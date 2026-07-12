@@ -1,0 +1,111 @@
+{
+  "protocol": {
+    "students": 30,
+    "strangers": 66,
+    "enrollment_images": 630,
+    "genuine_probes": 270,
+    "calibration_impostors": 990,
+    "test_impostors": 990,
+    "seed": 7
+  },
+  "calibrated_threshold": 0.3393,
+  "calibrated_margin": 0.0784,
+  "ablation": [
+    {
+      "config": "baseline (fixed 0.32, no guards)",
+      "threshold": 0.32,
+      "margin": null,
+      "voting": false,
+      "accuracy": 0.8741,
+      "tar": 0.8741,
+      "far": 0.0081,
+      "false_log_rate": 0.0354
+    },
+    {
+      "config": "+ calibrated threshold",
+      "threshold": 0.3393,
+      "margin": null,
+      "voting": false,
+      "accuracy": 0.8667,
+      "tar": 0.8667,
+      "far": 0.002,
+      "false_log_rate": 0.0101
+    },
+    {
+      "config": "+ top-2 margin",
+      "threshold": 0.3393,
+      "margin": 0.0784,
+      "voting": false,
+      "accuracy": 0.863,
+      "tar": 0.863,
+      "far": 0.002,
+      "false_log_rate": 0.0101
+    },
+    {
+      "config": "+ temporal voting",
+      "threshold": 0.3393,
+      "margin": 0.0784,
+      "voting": true,
+      "accuracy": 0.863,
+      "tar": 0.863,
+      "far": 0.002,
+      "false_log_rate": 0.0
+    }
+  ],
+  "degradation": [
+    {
+      "face_px": 16,
+      "mean_cos": 0.2779,
+      "accuracy": 0.6389,
+      "gated": "REJECT"
+    },
+    {
+      "face_px": 24,
+      "mean_cos": 0.348,
+      "accuracy": 0.8333,
+      "gated": "REJECT"
+    },
+    {
+      "face_px": 32,
+      "mean_cos": 0.3952,
+      "accuracy": 0.8611,
+      "gated": "REJECT"
+    },
+    {
+      "face_px": 40,
+      "mean_cos": 0.4146,
+      "accuracy": 0.8889,
+      "gated": "REJECT"
+    },
+    {
+      "face_px": 48,
+      "mean_cos": 0.419,
+      "accuracy": 0.8889,
+      "gated": "REJECT"
+    },
+    {
+      "face_px": 64,
+      "mean_cos": 0.4283,
+      "accuracy": 0.8889,
+      "gated": "accept"
+    },
+    {
+      "face_px": 80,
+      "mean_cos": 0.4299,
+      "accuracy": 0.8889,
+      "gated": "accept"
+    },
+    {
+      "face_px": 96,
+      "mean_cos": 0.4289,
+      "accuracy": 0.8889,
+      "gated": "accept"
+    },
+    {
+      "face_px": 112,
+      "mean_cos": 0.4295,
+      "accuracy": 0.8889,
+      "gated": "accept"
+    }
+  ]
+}

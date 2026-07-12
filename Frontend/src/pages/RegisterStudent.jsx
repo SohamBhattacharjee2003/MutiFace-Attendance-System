@@ -1,7 +1,12 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import CameraCapture from "../components/CameraCapture";
+import { getTrainingStatus } from "../utils/api";
 import axios from "axios";
+
+// The backend drops any identity with fewer than 8 embeddable images, so a student
+// registered with fewer would be saved to disk but never enter the model.
+const MIN_IMAGES = 10;
 
 export default function RegisterStudent() {
   const [name, setName] = useState("");
@@ -13,22 +18,52 @@ export default function RegisterStudent() {
     setImages((prev) => [...prev, img]);
   };
 
+  // Registering only writes images to disk; the student isn't recognizable until the
+  // retrain it kicks off finishes. Poll so the UI says "ready" only when it's true.
+  const waitForTraining = async (student) => {
+    for (let i = 0; i < 150; i++) {          // ~5 min ceiling
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const s = await getTrainingStatus();
+        if (s.status === "training") {
+          setMsg(`⏳ Training the model… ${s.message || ""}`);
+        } else if (s.status === "done") {
+          const dropped = (s.skipped || []).find((x) => x.name === student);
+          if (dropped) {
+            setMsg(`⚠️ ${student} was saved but left out of the model (${dropped.reason}). Add more images.`);
+          } else {
+            setMsg(`✅ ${student} is trained in and can be recognized now (${s.identities} identities).`);
+          }
+          return;
+        } else if (s.status === "error") {
+          setMsg(`❌ Training failed: ${s.message}`);
+          return;
+        }
+      } catch {
+        /* keep polling — the server may be busy embedding */
+      }
+    }
+    setMsg("⚠️ Training is taking unusually long. Check the server logs.");
+  };
+
   const registerNow = async () => {
-    if (!name || images.length < 5) {
-      alert("Please enter a name & capture at least 5 images.");
+    if (!name || images.length < MIN_IMAGES) {
+      alert(`Please enter a name & capture at least ${MIN_IMAGES} images.`);
       return;
     }
 
     setLoading(true);
+    const student = name;
     try {
       await axios.post("http://127.0.0.1:5000/register", {
-        name,
+        name: student,
         images,
       });
 
-      setMsg("🎉 Student registered successfully! Retrain model.");
+      setMsg(`🎉 ${student} registered. Training the model…`);
       setName("");
       setImages([]);
+      await waitForTraining(student);
     } catch (err) {
       console.error(err);
       setMsg("❌ Error registering student.");

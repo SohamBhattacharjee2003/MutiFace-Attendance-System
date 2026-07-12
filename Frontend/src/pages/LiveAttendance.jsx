@@ -115,8 +115,22 @@ export default function LiveAttendance() {
       const width = (x2 - x1) * scaleX;
       const height = (y2 - y1) * scaleY;
 
+      // A face can be recognized but still NOT marked present — it must also pass the
+      // liveness check (a photo held to the camera recognizes perfectly but never blinks).
+      // Green is reserved for "actually logged"; amber means "we know you, now blink".
       const isKnown = face.isKnown;
-      const color = isKnown ? "#10b981" : "#ef4444"; // Green for known, Red for unknown
+      const pending = isKnown && face.logged === false;
+      const color = !isKnown ? "#ef4444" : pending ? "#f59e0b" : "#10b981";
+
+      // Liveness needs a few frames of facial motion before it can tell a person from a
+      // photo, so "checking" is a normal transient state, not a failure.
+      const label = !isKnown
+        ? face.name                                     // Unknown / Move closer / Uncertain
+        : face.reason === "checking"
+          ? `${face.name} — verifying…`
+          : face.reason === "spoof_suspected"
+            ? `${face.name} — not live (photo?)`
+            : `${face.name} (${Math.round(face.confidence * 100)}%)`;
 
       return (
         <div
@@ -148,7 +162,7 @@ export default function LiveAttendance() {
               boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
             }}
           >
-            {face.name} ({Math.round(face.confidence * 100)}%)
+            {label}
           </div>
         </div>
       );

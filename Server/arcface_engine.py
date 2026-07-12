@@ -37,9 +37,12 @@ class ArcFaceEngine:
 
     def __init__(self, det_size=(640, 640)):
         from insightface.app import FaceAnalysis
-        # only detection + recognition → faster (skip age/gender/landmark nets)
+        # detection + recognition + 106-point landmarks. The landmark net is what makes
+        # liveness possible: eye contours give blink detection, and a printed photo or a
+        # phone screen cannot blink. Age/gender nets stay off (unused, and slow).
         self.app = FaceAnalysis(name="buffalo_l",
-                                allowed_modules=["detection", "recognition"],
+                                allowed_modules=["detection", "recognition",
+                                                 "landmark_2d_106"],
                                 providers=["CPUExecutionProvider"])
         self.app.prepare(ctx_id=-1, det_size=det_size)
         self.rec = self.app.models["recognition"]      # ArcFaceONNX
@@ -55,17 +58,19 @@ class ArcFaceEngine:
     # ── live / predict: detect every face in a full frame ────────────────────
     def embed_faces(self, bgr):
         """
-        Returns list of dicts: {box:[x1,y1,x2,y2], embedding:(512,), det_score}
+        Returns list of dicts: {box, embedding:(512,), det_score, landmarks:(106,2)|None}
         sorted left→right, for every detected face.
         """
         faces = self.app.get(bgr)
         out = []
         for f in faces:
             x1, y1, x2, y2 = f.bbox.astype(int).tolist()
+            lmk = getattr(f, "landmark_2d_106", None)
             out.append({
                 "box": [x1, y1, x2, y2],
                 "embedding": _normalize(f.normed_embedding),
                 "det_score": float(f.det_score),
+                "landmarks": np.asarray(lmk, dtype=np.float32) if lmk is not None else None,
             })
         out.sort(key=lambda d: d["box"][0])
         return out

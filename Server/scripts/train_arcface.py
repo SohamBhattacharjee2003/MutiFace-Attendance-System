@@ -43,49 +43,17 @@ from arcface_engine import ArcFaceEngine
 DATASET_DIR   = "processed_dataset"
 MODELS_DIR    = "models"
 RESULTS_DIR   = "results"
-CLF_OUT       = os.path.join(MODELS_DIR, "arcface_classifier.pkl")
-LE_OUT        = os.path.join(MODELS_DIR, "arcface_label_encoder.pkl")
-CENTROIDS_OUT = os.path.join(MODELS_DIR, "arcface_centroids.pkl")
+
+# Evaluation artifacts, deliberately NOT the files api.py serves. This script trains the
+# full N-class model (all identities, incl. VGGFace2) to produce the paper's metrics; the
+# deployed model is students-only with thresholds calibrated against those same VGGFace2
+# identities as impostors (see trainer.py). Overwriting the live model here would pair a
+# 98-class classifier with thresholds calibrated for a 2-class one.
+CLF_OUT       = os.path.join(MODELS_DIR, "eval_arcface_classifier.pkl")
+LE_OUT        = os.path.join(MODELS_DIR, "eval_arcface_label_encoder.pkl")
+CENTROIDS_OUT = os.path.join(MODELS_DIR, "eval_arcface_centroids.pkl")
 
 IMG_EXT = (".jpg", ".jpeg", ".png", ".bmp")
-
-
-def is_precropped(name):
-    """VGGFace2 identities (n000xxx) are already MTCNN-cropped → skip detection."""
-    return name.lower().startswith("n0")
-
-
-def build_embeddings(engine, dataset, max_per_class, min_per_class, seed):
-    rng = np.random.default_rng(seed)
-    X, y = [], []
-    identities = sorted(d for d in os.listdir(dataset)
-                        if os.path.isdir(os.path.join(dataset, d)))
-
-    for name in tqdm(identities, desc="Embedding identities"):
-        d = os.path.join(dataset, name)
-        files = [f for f in os.listdir(d) if f.lower().endswith(IMG_EXT)]
-        if len(files) < min_per_class:
-            continue
-        if len(files) > max_per_class:
-            files = list(rng.choice(files, size=max_per_class, replace=False))
-
-        # pre-cropped dataset faces → fast recogniser-only path;
-        # real registrations (webcam frames) → full detect+align.
-        embed = engine.embed_precropped if is_precropped(name) else engine.embed_training_image
-
-        got = 0
-        for f in files:
-            img = cv2.imread(os.path.join(d, f))
-            if img is None:
-                continue
-            emb = embed(img)
-            if emb is not None:
-                X.append(emb); y.append(name); got += 1
-        if got < min_per_class:                     # drop identities we couldn't embed
-            keep = [i for i, lab in enumerate(y) if lab != name]
-            X = [X[i] for i in keep]; y = [y[i] for i in keep]
-
-    return np.array(X, dtype=np.float32), np.array(y)
 
 
 def verification_metrics(X_test, y_test, seed, max_pairs=20000):
@@ -127,12 +95,18 @@ def main():
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
     print("Loading ArcFace engine (buffalo_l)…")
-    engine = ArcFaceEngine.get()
 
     print(f"\nEmbedding dataset '{args.dataset}' "
           f"(≤{args.max_per_class}/identity, ≥{args.min_per_class} to keep)…")
-    X, y = build_embeddings(engine, args.dataset,
-                            args.max_per_class, args.min_per_class, args.seed)
+    # shares the on-disk embedding cache with api.py's auto-retrain, so already-seen
+    # images are not pushed through ArcFace again
+    import trainer
+    X, y, emb_info = trainer.embed_dataset(
+        dataset=args.dataset, max_per_class=args.max_per_class,
+        min_per_class=args.min_per_class, seed=args.seed)
+    print(f"  embedded {emb_info['embedded']} new, {emb_info['from_cache']} from cache")
+    for s in emb_info["skipped"]:
+        print(f"  ⚠ skipped '{s['name']}': {s['reason']}")
     classes = np.unique(y)
     print(f"\n  Embeddings : {X.shape}")
     print(f"  Identities : {len(classes)}")

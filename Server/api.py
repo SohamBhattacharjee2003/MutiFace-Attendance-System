@@ -40,15 +40,26 @@ import io
 import os
 import csv
 import glob
+import time
 import base64
 import shutil
 import threading
+from collections import defaultdict, deque
+from functools import wraps
 from datetime import datetime
 
 import numpy as np
 import joblib
-import face_recognition
+import liveness
 from PIL import Image
+
+# The legacy dlib pipeline is a fallback that the deployed ArcFace path never uses. dlib
+# compiles from source and is slow to install, so it must not be a hard requirement — a
+# fresh clone should start without it.
+try:
+    import face_recognition
+except ImportError:              # noqa: BLE001
+    face_recognition = None
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -62,15 +73,60 @@ LABEL_ENC_FILE       = os.path.join(MODELS_DIR, "label_encoder.pkl")
 ARCFACE_CLF_FILE     = os.path.join(MODELS_DIR, "arcface_classifier.pkl")  # ArcFace (primary)
 ARCFACE_LE_FILE      = os.path.join(MODELS_DIR, "arcface_label_encoder.pkl")
 ARCFACE_CENTROIDS    = os.path.join(MODELS_DIR, "arcface_centroids.pkl")
-ARCFACE_COS_THRESHOLD = 0.32   # cosine sim to identity centroid; below → "Unknown"
+ARCFACE_THRESHOLDS   = os.path.join(MODELS_DIR, "arcface_thresholds.json")
+
+# Recognition gates. cos_threshold / margin are calibrated against the impostor cohort
+# at training time (models/arcface_thresholds.json); these are only the fallbacks.
+ARCFACE_COS_THRESHOLD = 0.32   # cosine to the best centroid; below → "Unknown"
+ARCFACE_MARGIN        = 0.05   # top1 must beat top2 by this → guards against lookalikes
+# Measured, not guessed (scripts/evaluate.py): accuracy collapses below ~24px (63.9%)
+# and is fully recovered by 40px (88.9%, same as full resolution). 60px was a guess and
+# was rejecting faces that recognize perfectly well.
+MIN_FACE_PX           = 40     # a face narrower than this is too far away to trust
+# InsightFace already drops detections below its own internal threshold (~0.5), so this
+# is a backstop, not the primary gate. Keep it low: real, well-lit, front-facing students
+# come back around 0.57–0.8, so anything near 0.6 here would reject genuine faces.
+MIN_DET_SCORE         = 0.50
+
+# Temporal voting: a face must be confidently recognized in VOTE_MIN of the last
+# VOTE_WINDOW seconds' predictions before it is written to the attendance log. One
+# lucky frame should not be able to mark a student present for the whole day.
+VOTE_MIN              = 3
+VOTE_WINDOW           = 15.0
+
+# Liveness: a recognized face must also blink before attendance is committed. Without
+# this, holding up a printed photo marks that person present — the exact proxy attendance
+# the system claims to prevent. Set LIVENESS=0 in the environment to measure the
+# attack-success baseline (see scripts/test_spoof.py).
+LIVENESS_REQUIRED     = os.getenv("LIVENESS", "1") != "0"
 DATASET_DIR          = "processed_dataset"   # generate_encodings.py reads this
 LOGS_DIR             = "logs"
 DATA_DIR             = "data"
 USERS_FILE           = os.path.join(DATA_DIR, "users.json")
 CONFIDENCE_THRESHOLD = 0.75                   # below this → "Unknown" / not logged
 RECOGNITION_MODEL    = "hog"                  # "hog" (CPU) or "cnn" (GPU)
-SECRET_KEY           = os.getenv("SECRET_KEY", "presence-ai-dev-secret-change-me")
 TOKEN_MAX_AGE        = 60 * 60 * 24 * 7       # 7 days
+
+# Auth tokens are signed with this key. The old hardcoded default meant anyone who read the
+# public repo could forge an admin token, silently undoing the auth on every route.
+#
+# Precedence: $SECRET_KEY (production) → data/secret.key (generated once, gitignored) → a
+# freshly generated key persisted there. Persisting matters: a key regenerated on every
+# start invalidates every session on every restart, which would log you out mid-demo.
+SECRET_KEY_FILE = os.path.join("data", "secret.key")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    os.makedirs("data", exist_ok=True)
+    if os.path.exists(SECRET_KEY_FILE):
+        with open(SECRET_KEY_FILE) as f:
+            SECRET_KEY = f.read().strip()
+    if not SECRET_KEY:
+        import secrets
+        SECRET_KEY = secrets.token_urlsafe(32)
+        with open(SECRET_KEY_FILE, "w") as f:
+            f.write(SECRET_KEY)
+        os.chmod(SECRET_KEY_FILE, 0o600)
+        print(f"🔑 Generated a signing key → {SECRET_KEY_FILE} (keep it out of git)")
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
@@ -84,19 +140,33 @@ _serializer = URLSafeTimedSerializer(SECRET_KEY, salt="auth-token")
 # Primary engine: ArcFace (buffalo_l) + linear SVM. Falls back to the legacy
 # dlib pipeline only if the ArcFace model hasn't been trained yet.
 arcface_clf = arcface_le = arcface_centroids = None
+arcface_thresholds = {"cos_threshold": ARCFACE_COS_THRESHOLD,
+                      "margin": ARCFACE_MARGIN, "calibrated": False}
 try:
     arcface_clf = joblib.load(ARCFACE_CLF_FILE)
     arcface_le = joblib.load(ARCFACE_LE_FILE)
     arcface_centroids = joblib.load(ARCFACE_CENTROIDS)
     print(f"✅ ArcFace classifier loaded ({len(arcface_le.classes_)} identities)")
+    try:
+        import json as _json
+        with open(ARCFACE_THRESHOLDS) as f:
+            arcface_thresholds = _json.load(f)
+        print(f"   thresholds: cos≥{arcface_thresholds['cos_threshold']} "
+              f"margin≥{arcface_thresholds['margin']} "
+              f"({'calibrated' if arcface_thresholds.get('calibrated') else 'defaults'})")
+    except Exception:             # noqa: BLE001 — pre-calibration models keep the defaults
+        print("   thresholds: using defaults (retrain to calibrate)")
 except Exception as e:            # noqa: BLE001
     print(f"ℹ️  ArcFace model not found yet ({e}). Train: python scripts/train_arcface.py")
 
-try:
-    pipeline = joblib.load(CLASSIFIER_FILE)
-    label_encoder = joblib.load(LABEL_ENC_FILE)
-    print("✅ Legacy dlib classifier loaded (fallback)")
-except Exception:                 # noqa: BLE001
+if face_recognition is not None:
+    try:
+        pipeline = joblib.load(CLASSIFIER_FILE)
+        label_encoder = joblib.load(LABEL_ENC_FILE)
+        print("✅ Legacy dlib classifier loaded (fallback)")
+    except Exception:             # noqa: BLE001
+        pipeline, label_encoder = None, None
+else:
     pipeline, label_encoder = None, None
 
 USE_ARCFACE = arcface_clf is not None
@@ -109,6 +179,73 @@ def get_engine():
         from arcface_engine import ArcFaceEngine
         _engine = ArcFaceEngine.get()
     return _engine
+
+
+# ── Auto-retrain (registration → model, with no restart) ──────────────────────
+# Registering a student only writes images to disk; until the classifier is refit
+# they are not a class it can output, so they always come back "Unknown". A
+# background worker refits after every registration and swaps the new model into
+# the globals above, so the running process picks it up without a restart.
+_train_lock = threading.Lock()          # only one training run at a time
+_train_state = {"status": "idle", "message": "", "identities": None,
+                "started_at": None, "finished_at": None, "pending": False}
+
+
+def _set_train_state(**kw):
+    _train_state.update(kw)
+
+
+def _training_worker():
+    global arcface_clf, arcface_le, arcface_centroids, arcface_thresholds, USE_ARCFACE
+
+    while True:
+        _set_train_state(status="training", message="Starting…", pending=False,
+                         started_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                         finished_at=None)
+        try:
+            import trainer
+            summary = trainer.retrain(
+                dataset=DATASET_DIR,
+                progress=lambda m: _set_train_state(message=m),
+            )
+            clf, le, centroids, thresholds = summary.pop("_model")
+
+            # hot-swap: /predict reads these globals on the next request
+            arcface_clf, arcface_le, arcface_centroids = clf, le, centroids
+            arcface_thresholds = thresholds
+            USE_ARCFACE = True
+
+            msg = (f"{summary['identities']} identities "
+                   f"({summary['newly_embedded']} new images embedded, "
+                   f"{summary['from_cache']} from cache)")
+            for s in summary["skipped"]:
+                print(f"⚠️  Skipped '{s['name']}': {s['reason']}")
+            _set_train_state(status="done", message=msg,
+                             identities=summary["identities"],
+                             skipped=summary["skipped"],
+                             finished_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            print(f"✅ Model retrained — {msg}")
+        except Exception as e:              # noqa: BLE001 — keep serving the old model
+            _set_train_state(status="error", message=str(e),
+                             finished_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            print(f"❌ Retrain failed ({e}). Still serving the previous model.")
+
+        # a registration that landed mid-run needs another pass to be included
+        with _train_lock:
+            if not _train_state["pending"]:
+                _train_state["running"] = False
+                return
+
+
+def trigger_retrain():
+    """Kick off a retrain in the background; coalesce if one is already running."""
+    with _train_lock:
+        if _train_state.get("running"):
+            _train_state["pending"] = True      # fold into a follow-up run
+            return "queued"
+        _train_state["running"] = True
+    threading.Thread(target=_training_worker, daemon=True).start()
+    return "started"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -167,6 +304,29 @@ def log_attendance(student_id, confidence, camera="Web"):
     print(f"[✅ Attendance] {student_id} ({confidence*100:.1f}%) via {camera}")
 
 
+# ── Temporal voting ───────────────────────────────────────────────────────────
+# Attendance is written once per student per day, so a single misrecognized frame
+# marks the wrong person present permanently. Video gives us many looks at the same
+# face — require several agreeing sightings inside a short window before committing.
+_votes = defaultdict(deque)      # name -> timestamps of recent confident sightings
+_vote_lock = threading.Lock()
+
+
+def _vote_and_log(student_id, confidence, camera="Web"):
+    """Record a sighting; log attendance only once it clears the voting threshold."""
+    now = time.time()
+    with _vote_lock:
+        seen = _votes[student_id]
+        seen.append(now)
+        while seen and now - seen[0] > VOTE_WINDOW:
+            seen.popleft()
+        confirmed = len(seen) >= VOTE_MIN
+    if confirmed:
+        log_attendance(student_id, confidence, camera)
+        return True
+    return False
+
+
 # ── Auth helpers (file-based users + signed tokens) ───────────────────────────
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -206,6 +366,23 @@ def user_from_request():
     except (BadSignature, SignatureExpired):
         return None
     return find_user(email)
+
+
+def require_auth(fn):
+    """
+    Gate an endpoint behind a valid Bearer token.
+
+    Attendance is exactly the thing people have an incentive to cheat, and until now
+    every route below was open: anyone on the same network could mark themselves
+    present, delete a student, or wipe the log with a single curl. Login existed but
+    nothing enforced it.
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if user_from_request() is None:
+            return jsonify({"error": "Authentication required"}), 401
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
@@ -264,6 +441,7 @@ def me():
 
 # ── Face recognition ──────────────────────────────────────────────────────────
 @app.route("/predict", methods=["POST"])
+@require_auth
 def predict():
     if not USE_ARCFACE and pipeline is None:
         return jsonify({"error": "No classifier trained. Run python scripts/train_arcface.py"}), 500
@@ -284,29 +462,92 @@ def predict():
 
 def _predict_arcface(rgb):
     """
-    RetinaFace/MTCNN detect + ArcFace 512-d embedding. Label comes from the SVM;
-    confidence is the cosine similarity to that identity's centroid (calibrated,
-    unlike the 97-class SVM probability which saturates near ~0.2).
+    RetinaFace detect + ArcFace 512-d embedding, then three gates before we are
+    willing to put a name on a face:
+
+      1. size/quality — a face only ~30px wide is upscaled to 112px before embedding,
+         which invents no detail. The SVM has no "none of the above" option and will
+         still emit a confident-looking class, so small faces must be rejected up
+         front rather than guessed at.
+      2. absolute    — cosine to the best centroid must clear the calibrated threshold
+         (open-set rejection: is this anyone we know?).
+      3. margin      — the best centroid must beat the runner-up by a margin. Two
+         students who look alike both score high against each other; the absolute
+         threshold cannot separate them, but the gap between them can.
+
+    Unlike the previous version, cosine is computed against EVERY centroid rather than
+    only the SVM's pick, so we can see the runner-up at all.
     """
     import cv2
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+
+    names = sorted(arcface_centroids) if arcface_centroids else []
+    M = np.stack([arcface_centroids[n] for n in names]) if names else None
+    cos_thresh = arcface_thresholds.get("cos_threshold", ARCFACE_COS_THRESHOLD)
+    margin_min = arcface_thresholds.get("margin", ARCFACE_MARGIN)
+
     results = []
     for face in get_engine().embed_faces(bgr):
+        x1, y1, x2, y2 = face["box"]
+        width = x2 - x1
         emb = np.asarray(face["embedding"], dtype=np.float32)
-        best_idx = int(arcface_clf.predict([emb])[0])
-        name_pred = str(arcface_le.inverse_transform([best_idx])[0])
-        # cosine confidence vs the predicted identity's centroid
-        cos = float(np.dot(emb, arcface_centroids[name_pred])) if arcface_centroids else 0.0
-        is_known = cos >= ARCFACE_COS_THRESHOLD
-        if is_known:
-            name = name_pred
-            log_attendance(name, cos)
-        else:
-            name = "Unknown"
-        results.append({
-            "name": name, "confidence": cos, "isKnown": is_known,
-            "box": face["box"], "det_score": round(face["det_score"], 3),
-        })
+
+        base = {"box": face["box"], "det_score": round(face["det_score"], 3),
+                "faceWidth": int(width)}
+
+        # gate 1 — too far away, or too weak a detection, to identify reliably.
+        # Distinct reasons: "too small" and "poorly detected" need different user-facing
+        # advice (step closer vs. face the camera / fix the lighting).
+        if width < MIN_FACE_PX:
+            results.append({**base, "name": "Move closer", "confidence": 0.0,
+                            "isKnown": False, "reason": "face_too_small"})
+            continue
+        if face["det_score"] < MIN_DET_SCORE:
+            results.append({**base, "name": "Face the camera", "confidence": 0.0,
+                            "isKnown": False, "reason": "low_detection_quality"})
+            continue
+
+        if M is None:
+            results.append({**base, "name": "Unknown", "confidence": 0.0, "isKnown": False})
+            continue
+
+        sims = M @ emb
+        order = np.argsort(sims)[::-1]
+        top1 = float(sims[order[0]])
+        top2 = float(sims[order[1]]) if len(order) > 1 else -1.0
+        margin = top1 - top2
+        candidate = names[order[0]]
+
+        # gate 2 — nobody we know
+        if top1 < cos_thresh:
+            results.append({**base, "name": "Unknown", "confidence": top1,
+                            "isKnown": False, "reason": "below_threshold"})
+            continue
+
+        # gate 3 — two identities too close to call
+        if margin < margin_min:
+            results.append({**base, "name": "Uncertain", "confidence": top1,
+                            "isKnown": False, "reason": "ambiguous",
+                            "candidates": [candidate, names[order[1]]],
+                            "margin": round(margin, 4)})
+            continue
+
+        # gate 4 — liveness. Recognition cannot distinguish a person from a photo of that
+        # person, so being recognized must not be sufficient to be marked present.
+        # A live face blinks; a printed photo or a still phone screen does not.
+        is_live, ear, live_state = liveness.update(candidate, face.get("landmarks"))
+        if LIVENESS_REQUIRED and not is_live:
+            results.append({**base, "name": candidate, "confidence": top1,
+                            "isKnown": True, "logged": False, "live": False,
+                            "ear": round(ear, 3) if ear else None,
+                            "reason": live_state,          # "blink_required"
+                            "margin": round(margin, 4)})
+            continue
+
+        logged = _vote_and_log(candidate, top1)
+        results.append({**base, "name": candidate, "confidence": top1, "isKnown": True,
+                        "margin": round(margin, 4), "logged": logged, "live": True,
+                        "ear": round(ear, 3) if ear else None})
     return results
 
 
@@ -335,6 +576,7 @@ def _predict_dlib(rgb):
 # ── Students ──────────────────────────────────────────────────────────────────
 @app.route("/register", methods=["POST"])
 @app.route("/register-student", methods=["POST"])   # backwards-compatible alias
+@require_auth
 def register_student():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
@@ -343,16 +585,18 @@ def register_student():
         return jsonify({"error": "Name and at least 1 image required"}), 400
 
     _, total = save_images(name, images)
+    training = trigger_retrain()
     return jsonify({
         "status": "success",
         "samples": total,
-        "message": (f"{name} registered with {len(images)} image(s). Retrain: "
-                    "python scripts/generate_encodings.py && "
-                    "python scripts/train_classifier.py"),
+        "training": training,
+        "message": (f"{name} registered with {len(images)} image(s). "
+                    f"Model is retraining now — they'll be recognized in a few seconds."),
     })
 
 
 @app.route("/update-student", methods=["POST"])
+@require_auth
 def update_student():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
@@ -365,20 +609,34 @@ def update_student():
         return jsonify({"error": f"Student '{name}' not found"}), 404
 
     _, total = save_images(name, images)
+    training = trigger_retrain()
     return jsonify({
         "status": "success",
         "total_samples": total,
-        "message": f"Added {len(images)} image(s) for {name}. Retrain to apply.",
+        "training": training,
+        "message": f"Added {len(images)} image(s) for {name}. Model is retraining now.",
     })
 
 
+def is_real_student(name):
+    """
+    The VGGFace2 identities (n000xxx) in processed_dataset are a research cohort — an
+    impostor set used to calibrate the rejection threshold — not people who enrolled.
+    Counting them as "registered students" made the dashboard read "98 students
+    registered, 2 trained", which looks broken and is simply untrue.
+    """
+    import trainer
+    return not trainer.is_impostor(name)
+
+
 @app.route("/students", methods=["GET"])
+@require_auth
 def get_students():
     students = []
     if os.path.isdir(DATASET_DIR):
         for name in sorted(os.listdir(DATASET_DIR)):
             d = os.path.join(DATASET_DIR, name)
-            if os.path.isdir(d):
+            if os.path.isdir(d) and is_real_student(name):
                 samples = len([f for f in os.listdir(d)
                                if f.lower().endswith((".jpg", ".jpeg", ".png"))])
                 students.append({"name": name, "samples": samples})
@@ -386,6 +644,7 @@ def get_students():
 
 
 @app.route("/students/valid-names", methods=["GET"])
+@require_auth
 def valid_student_names():
     """Names the active model can actually recognize (are in the classifier)."""
     le = arcface_le if USE_ARCFACE else label_encoder
@@ -394,15 +653,32 @@ def valid_student_names():
 
 
 @app.route("/students/<name>", methods=["DELETE"])
+@require_auth
 def delete_student(name):
     save_dir, _ = safe_student_dir(name)
     if not os.path.isdir(save_dir):
         return jsonify({"error": f"Student '{name}' not found"}), 404
     shutil.rmtree(save_dir)
+    training = trigger_retrain()
     return jsonify({
         "status": "success",
-        "message": f"Deleted {name}. Retrain to remove them from the model.",
+        "training": training,
+        "message": f"Deleted {name}. Model is retraining to remove them.",
     })
+
+
+@app.route("/train", methods=["POST"])
+@require_auth
+def train():
+    """Manually kick off a retrain (registrations already do this automatically)."""
+    return jsonify({"status": trigger_retrain(), "state": _train_state})
+
+
+@app.route("/train/status", methods=["GET"])
+@require_auth
+def train_status():
+    """Poll this after registering: status goes idle → training → done."""
+    return jsonify(_train_state)
 
 
 # ── Attendance ────────────────────────────────────────────────────────────────
@@ -428,19 +704,21 @@ def load_attendance_records():
 
 
 @app.route("/attendance", methods=["GET"])
+@require_auth
 def get_attendance():
     return jsonify(load_attendance_records())
 
 
 @app.route("/stats", methods=["GET"])
+@require_auth
 def stats():
     """Live aggregate numbers for the dashboard (single source of truth)."""
-    # students on disk (with ≥1 image)
+    # enrolled students on disk (with ≥1 image) — excludes the VGGFace2 research cohort
     students = 0
     if os.path.isdir(DATASET_DIR):
         for d in os.listdir(DATASET_DIR):
             p = os.path.join(DATASET_DIR, d)
-            if os.path.isdir(p) and any(
+            if os.path.isdir(p) and is_real_student(d) and any(
                     f.lower().endswith((".jpg", ".jpeg", ".png")) for f in os.listdir(p)):
                 students += 1
 
@@ -452,13 +730,16 @@ def stats():
     present_today = sorted({r["name"] for r in records
                             if (r["time"] or "").startswith(today)})
 
-    # real model accuracy from the last training run, if available
+    # Accuracy comes from the held-out evaluation (scripts/evaluate.py), NOT from a
+    # training run. The old code reported the training accuracy of a 98-class model that
+    # is no longer even deployed — a number nobody could source, on screen during a demo.
     accuracy = None
     try:
         import json
-        with open(os.path.join("results", "arcface_metrics.json")) as f:
-            accuracy = json.load(f)["identification"]["accuracy"]
-    except Exception:            # noqa: BLE001
+        with open(os.path.join("results", "evaluation.json")) as f:
+            ev = json.load(f)
+        accuracy = ev["ablation"][-1]["accuracy"]     # the shipped configuration
+    except Exception:            # noqa: BLE001 — no evaluation run yet → report nothing
         accuracy = None
 
     return jsonify({
@@ -473,6 +754,7 @@ def stats():
 
 
 @app.route("/attendance/clear", methods=["DELETE"])
+@require_auth
 def clear_attendance():
     removed = 0
     with _log_lock:
@@ -492,4 +774,9 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # debug=True exposes the Werkzeug debugger console. Bound to 0.0.0.0 that is a remote
+    # code execution hole for anyone on the same network — strictly worse than the missing
+    # auth we just fixed. It must be opt-in and never the default.
+    debug = os.getenv("FLASK_DEBUG", "0") == "1"
+    host = os.getenv("HOST", "127.0.0.1" if not debug else "127.0.0.1")
+    app.run(host=host, port=int(os.getenv("PORT", "5000")), debug=debug)
