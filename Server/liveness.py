@@ -76,7 +76,12 @@ CLOSE_RATIO = 0.65     # eye counts as shut below 65% of that person's baseline
 OPEN_RATIO = 0.85      # and open again above 85% (hysteresis stops threshold flapping)
 BASELINE_PCTL = 90     # "eyes open" = the 90th percentile of their recent EARs
 
-MIN_SAMPLES = 4        # frames needed before we judge (≈6s at 1.5s/frame)
+MIN_SAMPLES = 3        # frames before we can judge at all (~2s at 0.7s/frame)
+# A real person who happens to be sitting still for a moment has not yet produced enough
+# motion to pass — but calling them a SPOOF at that point is a false alarm, and it is what
+# made the UI flash "not live (photo?)" at a genuine user. Until this many frames have
+# accumulated we say "checking"; only a face that stays rigid this long is called out.
+SPOOF_AFTER = 7
 LIVE_WINDOW = 30.0     # seconds a liveness pass stays fresh
 HISTORY = 40           # per-identity samples kept
 
@@ -182,10 +187,14 @@ def update(identity, landmarks, now=None):
 
         live_ts = _last_live.get(identity)
         fresh = live_ts is not None and (now - live_ts) <= LIVE_WINDOW
+        seen = len(recent)
 
     if fresh:
         return True, ear, "live"
-    # a rigid, unchanging face is what a photograph looks like
+    # Still gathering evidence — a real person may simply have been still so far.
+    if seen < SPOOF_AFTER:
+        return False, ear, "checking"
+    # Rigid for this long is what a photograph looks like.
     return False, ear, "spoof_suspected"
 
 

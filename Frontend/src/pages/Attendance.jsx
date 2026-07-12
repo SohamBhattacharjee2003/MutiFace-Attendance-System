@@ -120,7 +120,7 @@ export default function Attendance() {
   const known = results.filter((r) => r.isKnown).length;
 
   return (
-    <div className="min-h-screen w-full mx-auto max-w-6xl px-5 sm:px-8 pt-24 pb-16">
+    <div className="min-h-screen w-full mx-auto max-w-[1500px] px-5 sm:px-8 pt-24 pb-16">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="display-lg text-white">
@@ -139,7 +139,7 @@ export default function Attendance() {
       </div>
 
       {/* camera left, verdicts right — the results are the point, so they get real estate */}
-      <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr] lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[2fr_minmax(300px,1fr)] lg:items-start">
         <Card pad="p-4" className="relative">
           <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/40">
             <CameraCapture onCapture={handleCapture} loading={loading} />

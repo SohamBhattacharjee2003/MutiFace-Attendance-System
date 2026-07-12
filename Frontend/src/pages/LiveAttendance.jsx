@@ -60,9 +60,14 @@ export default function LiveAttendance() {
     setIsAttendanceActive(true);
     setDetectedFaces([]);
 
+    // 700ms, not 1500ms. Measured (scripts/benchmark.py): one face costs ~250ms end to
+    // end, so 1.5s was leaving the CPU idle most of the time — and it was the reason
+    // marking someone present took ~10s (liveness needs several frames, then voting needs
+    // several more). The busy-guard drops a frame rather than queueing if the backend is
+    // still working, so a slower machine degrades gracefully instead of piling up.
     intervalRef.current = setInterval(() => {
       captureAndPredict();
-    }, 1500); // give CPU ArcFace time; the busy-guard prevents pile-ups
+    }, 700);
   };
 
   const stopAttendance = () => {
@@ -175,7 +180,7 @@ export default function LiveAttendance() {
   const logged = detectedFaces.filter((f) => f.logged).length;
 
   return (
-    <div className="min-h-screen w-full mx-auto max-w-6xl px-5 sm:px-8 pt-24 pb-16">
+    <div className="min-h-screen w-full mx-auto max-w-[1500px] px-5 sm:px-8 pt-24 pb-16">
       {/* header: title + controls on one line — it was a full-height hero before */}
       <Card pad="p-4" className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -189,7 +194,7 @@ export default function LiveAttendance() {
                 {isAttendanceActive ? (
                   <span className="inline-flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                    Scanning every 1.5s — all faces in frame
+                    Scanning ~1.4×/sec — every face in frame
                   </span>
                 ) : (
                   "Start to begin marking attendance"
@@ -216,7 +221,7 @@ export default function LiveAttendance() {
         </div>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr] lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[2fr_minmax(300px,1fr)] lg:items-start">
         {/* video: capped by aspect ratio, not left to fill the viewport */}
         <Card pad="p-3">
           <div className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-black/50"
@@ -268,7 +273,7 @@ export default function LiveAttendance() {
                    sub="Step into view. Faces under 40px wide are refused rather than guessed at." />
           ) : (
             <>
-              <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
+              <div className="max-h-[46vh] min-h-[180px] space-y-2 overflow-y-auto pr-1">
                 {detectedFaces.map((f, i) => {
                   const tone = !f.isKnown ? "bad" : f.logged ? "good" : "warn";
                   const status = !f.isKnown
