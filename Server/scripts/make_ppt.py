@@ -109,6 +109,41 @@ def figures(ev):
     print(f"  figures → {FIG}/")
 
 
+
+from pptx.enum.shapes import MSO_SHAPE
+
+BLUE_BAR = RGBColor(0x1F, 0x77, 0xC2)     # the footer bar in the team's template
+BOX_RED = RGBColor(0xFD, 0xEC, 0xEA)
+BOX_BLUE = RGBColor(0xE8, 0xF1, 0xFB)
+BOX_GREEN = RGBColor(0xE7, 0xF6, 0xEE)
+BOX_GREY = RGBColor(0xF4, 0xF6, 0xF9)
+
+
+def chrome(s, n):
+    """Footer bar + slide number — matches the department template."""
+    bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(7.05),
+                             Inches(13.333), Inches(0.45))
+    bar.fill.solid(); bar.fill.fore_color.rgb = BLUE_BAR
+    bar.line.fill.background()
+    bar.shadow.inherit = False
+    tb = s.shapes.add_textbox(Inches(12.5), Inches(7.08), Inches(0.7), Inches(0.4))
+    p = tb.text_frame.paragraphs[0]
+    p.text = str(n); p.alignment = PP_ALIGN.RIGHT
+    p.runs[0].font.size = Pt(12); p.runs[0].font.bold = True
+    p.runs[0].font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+
+
+def panel(s, left, top, width, height, fill, edge):
+    """A filled, outlined callout — the visual language of the original deck."""
+    shp = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(left), Inches(top),
+                             Inches(width), Inches(height))
+    shp.fill.solid(); shp.fill.fore_color.rgb = fill
+    shp.line.color.rgb = edge; shp.line.width = Pt(1.25)
+    shp.shadow.inherit = False
+    shp.text_frame.text = ""
+    return shp
+
+
 # ── slide helpers ─────────────────────────────────────────────────────────────
 def slide(prs, heading):
     s = prs.slides.add_slide(prs.slide_layouts[6])
@@ -119,6 +154,10 @@ def slide(prs, heading):
     p.runs[0].font.size = Pt(28)
     p.runs[0].font.bold = True
     p.runs[0].font.color.rgb = NAVY
+    rule = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(5.4), Inches(0.92),
+                              Inches(2.5), Inches(0.045))
+    rule.fill.solid(); rule.fill.fore_color.rgb = BLUE_BAR
+    rule.line.fill.background(); rule.shadow.inherit = False
     return s
 
 
@@ -220,20 +259,22 @@ def main():
         ("gap our project addresses:", True, NAVY, 0),
     ], 0.7, 1.2, 12.0, 1.6, size=14)
 
+    panel(s, 0.7, 2.95, 11.9, 1.75, BOX_RED, RED)
     bullets(s, [
         ("Face recognition is DESIGNED to give a photo of you the same embedding as you.", True, RED, 0),
         ("That is what makes it a good face model — and it is why recognition alone", True, RED, 0),
         ("cannot prevent proxy attendance. We tested it: a printed photo was marked", True, RED, 0),
         ("present 100% of the time.", True, RED, 0),
-    ], 0.9, 3.1, 11.6, 1.4, size=15)
+    ], 0.95, 3.15, 11.4, 1.4, size=14.5)
 
+    panel(s, 0.7, 4.8, 11.9, 1.95, BOX_GREY, NAVY)
     bullets(s, [
         ("Four failures a real deployment must survive", True, NAVY, 0),
         "•  A photograph or phone screen held up to the camera  →  marked present",
         "•  A stranger walking past  →  a softmax has no way to say 'nobody'",
         "•  A student at the back of the room  →  too few pixels to identify, but still named",
         "•  One misread frame  →  wrong student marked present for the entire day",
-    ], 0.9, 4.9, 11.6, 2.0, size=13)
+    ], 0.95, 4.95, 11.4, 1.8, size=12.5)
 
     # ── 5. LITERATURE REVIEW ─────────────────────────────────────────────────
     s = slide(prs, "LITERATURE REVIEW")
@@ -257,15 +298,17 @@ def main():
         "our system uses (pretrained and frozen — we do not claim it).",
     ], 0.7, 1.2, 12.0, 4.4, size=12.5)
 
+    panel(s, 0.6, 5.75, 12.1, 1.2, BOX_RED, RED)
     bullets(s, [
         ("RESEARCH GAP", True, RED, 0),
         ("Every attendance paper above reports one accuracy number on clean data. None of them "
          "test a presentation attack, none report a stranger-rejection rate, and none treat "
          "'recognised' and 'marked present' as different decisions. That gap is our project.", True, RED, 0),
-    ], 0.7, 5.9, 12.0, 1.1, size=12.5)
+    ], 0.85, 5.85, 11.7, 1.05, size=11.5)
 
     # ── 6. PROPOSED METHODOLOGY ──────────────────────────────────────────────
     s = slide(prs, "PROPOSED METHODOLOGY")
+    panel(s, 0.6, 1.1, 6.2, 3.2, BOX_BLUE, NAVY)
     bullets(s, [
         ("How it works", True, NAVY, 0),
         "Every face in the frame is detected, embedded (512-d) and matched against each",
@@ -278,6 +321,7 @@ def main():
         "and blocks the photo/screen proxy that defeats ordinary face recognition.",
     ], 0.7, 1.2, 6.3, 3.0, size=12.5)
 
+    panel(s, 7.05, 1.1, 5.75, 5.8, BOX_GREEN, GREEN)
     bullets(s, [
         ("Innovation and uniqueness — stated honestly", True, NAVY, 0),
         "",
@@ -390,6 +434,7 @@ def main():
         "16 faces per frame in 1.3 s on a laptop CPU. Fully offline: no cloud, no GPU, ₹0/year.",
     ], 0.7, 1.2, 7.2, 5.6, size=12.5)
 
+    panel(s, 7.95, 1.1, 5.0, 5.8, BOX_RED, RED)
     bullets(s, [
         ("LIMITATIONS & FUTURE WORK", True, RED, 0),
         "",
@@ -459,6 +504,12 @@ def main():
     p.text = "THANK YOU"
     p.alignment = PP_ALIGN.CENTER
     p.runs[0].font.size = Pt(48); p.runs[0].font.bold = True; p.runs[0].font.italic = True
+
+    # the blue footer bar + slide number, matching the department template
+    for i, sl in enumerate(prs.slides):
+        if i == 0:
+            continue                      # title page carries no number
+        chrome(sl, i)
 
     prs.save(OUT)
     print(f"\n✅ {OUT}  ({len(prs.slides._sldIdLst)} slides)")
