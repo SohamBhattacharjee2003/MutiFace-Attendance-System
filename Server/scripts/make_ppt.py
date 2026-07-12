@@ -1,21 +1,19 @@
 """
 make_ppt.py
-Builds the deck in the DEPARTMENT TEMPLATE exactly (Project_Presentation_Format_2025):
+Rebuilds the team's OWN deck — same 11 slides, same headings, same visual language
+(navy Times New Roman headings, coloured outline boxes, chevrons, blue footer bar).
+Only the CONTENT changes.
 
-    Title Page · Idea Title · Technical Approach & Workflow (×2) ·
-    Results · Impact and Benefits · Research and References
+    Title · Project Title · Objective · Problem Definition · Literature Review ·
+    Proposed Methodology · Experimental Details · Results and Analysis ·
+    Conclusion · References · Thank You
 
-Template rules copied from the format PDF:
-    - white background
-    - centred heading, Times New Roman, bold
-    - body text in Arial with "•" bullets and "❖" section markers
-    - full-width blue footer bar carrying a white slide number on the right
-
-Every number and figure is generated from this repository's own measurements
+Every number and figure comes from this repository's own measurements
 (results/evaluation.json, results/benchmark.json, scripts/test_spoof.py) rather than
-typed in, so the slides cannot drift from what the code does. The team's earlier deck
-claimed MTCNN + FaceNet + MongoDB — none of which this system uses — and a 95% accuracy
-that was never measured. That is the failure mode this script exists to prevent.
+being typed in. The previous deck claimed MTCNN + FaceNet + MongoDB — none of which
+this system uses — a 95% accuracy that was never measured, and "high accuracy using
+MTCNN model" (MTCNN is a *detector*; it cannot recognise anyone). Generating the slides
+from the measurement files is what stops that happening again.
 
     python scripts/make_ppt.py   ->   results/PresenceAI_Presentation.pptx
 """
@@ -34,31 +32,44 @@ from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
 RESULTS = "results"
 OUT = os.path.join(RESULTS, "PresenceAI_Presentation.pptx")
 FIG = os.path.join(RESULTS, "ppt_figs")
 
-# ── template palette ─────────────────────────────────────────────────────────
-BAR = RGBColor(0x10, 0x76, 0xBC)      # the blue footer bar
-NAVY = RGBColor(0x1F, 0x3A, 0x6E)
+# ── the team's existing palette, sampled from their deck ─────────────────────
+HEAD_NAVY = RGBColor(0x1F, 0x38, 0x64)     # heading colour
+BAR_BLUE = RGBColor(0x10, 0x76, 0xBC)      # footer bar
+WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 BLACK = RGBColor(0x00, 0x00, 0x00)
 INK = RGBColor(0x1A, 0x1A, 0x1A)
 RED = RGBColor(0xC0, 0x00, 0x00)
 GREEN = RGBColor(0x1E, 0x7A, 0x45)
-WHITE = RGBColor(0xFF, 0xFF, 0xFF)
+
+# outline colours used on their objective / conclusion slides
+O_GREEN = RGBColor(0x70, 0xAD, 0x47)
+O_RED = RGBColor(0xC0, 0x00, 0x00)
+O_BLUE = RGBColor(0x44, 0x72, 0xC4)
+O_ORANGE = RGBColor(0xED, 0x7D, 0x31)
+O_PURPLE = RGBColor(0x80, 0x64, 0xA2)
+O_TEAL = RGBColor(0x4B, 0xAC, 0xC6)
+
+LIT_FILL = RGBColor(0xDE, 0xEA, 0xF6)
+LIT_LINE = RGBColor(0x2E, 0x75, 0xB6)
+BOX_BLUE = RGBColor(0xB8, 0xCC, 0xE4)
+BOX_ORANGE = RGBColor(0xFB, 0xD5, 0xB5)
 
 HEAD_FONT = "Times New Roman"
-BODY_FONT = "Arial"
+BODY_FONT = "Calibri"
 
 M_BLUE, M_RED, M_GREEN, M_GREY, M_AMBER = "#1076bc", "#c00000", "#1e7a45", "#595959", "#c07b0b"
 
 
 # ════════════════════════════════════════════════════════════════ FIGURES ══
 def _box(ax, x, y, w, h, t, fc, ec, fs=8, bold=False):
-    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.02,rounding_size=0.06",
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.02,rounding_size=0.05",
                                 facecolor=fc, edgecolor=ec, linewidth=1.3, zorder=2))
     ax.text(x + w / 2, y + h / 2, t, ha="center", va="center", fontsize=fs,
             fontweight="bold" if bold else "normal", zorder=3, linespacing=1.35)
@@ -66,7 +77,7 @@ def _box(ax, x, y, w, h, t, fc, ec, fs=8, bold=False):
 
 def _arrow(ax, x1, y1, x2, y2, c=M_GREY):
     ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle="-|>",
-                                 mutation_scale=12, color=c, linewidth=1.2, zorder=1))
+                                 mutation_scale=11, color=c, linewidth=1.2, zorder=1))
 
 
 def figures(ev, bm):
@@ -74,71 +85,48 @@ def figures(ev, bm):
     plt.rcParams.update({"font.size": 10, "axes.spines.top": False,
                          "axes.spines.right": False, "figure.dpi": 200})
 
-    # workflow strip (slide 3)
-    fig, ax = plt.subplots(figsize=(11.8, 2.4)); ax.axis("off")
-    ax.set_xlim(0, 11.8); ax.set_ylim(0, 2.4)
-    steps = [
-        ("1. Face input\n(web camera)", "#eef4fb"),
-        ("2. Detect ALL faces\nRetinaFace / SCRFD", "#dce9f7"),
-        ("3. Align + embed\nArcFace 512-d", "#c9dcf3"),
-        ("4. Match vs each\nstudent centroid", "#b6cfef"),
-        ("5. FOUR GATES\nsize / threshold\nmargin / LIVENESS", "#f8d7d2"),
-        ("6. Temporal vote\n(3 frames agree)", "#d5ecdf"),
-        ("7. Attendance\nrecorded (CSV)", "#c3e5d1"),
-    ]
-    w, gap = 1.45, 0.22
-    for i, (label, col) in enumerate(steps):
-        x = i * (w + gap)
-        ec = M_RED if "GATES" in label else "#8fa3b8"
-        _box(ax, x, 0.6, w, 1.15, label, col, ec, 7.6, "GATES" in label)
-        if i < len(steps) - 1:
-            _arrow(ax, x + w, 1.17, x + w + gap, 1.17)
-    ax.text(0, 0.2, "The deep model is FROZEN — enrolling a student stores a centroid; it does not retrain the "
-                    "network.   Steps 5-6 are our contribution.",
-            fontsize=8, color=M_GREY, style="italic")
-    fig.tight_layout(); fig.savefig(f"{FIG}/workflow.png"); plt.close(fig)
-
-    # the four gates (slide 4)
-    fig, ax = plt.subplots(figsize=(11.8, 2.5)); ax.axis("off")
-    ax.set_xlim(0, 11.8); ax.set_ylim(0, 2.5)
-    gates = [
-        ("GATE 1 - SIZE\nface >= 40 px ?", 'reject ->\n"Move closer"', "#fff4e0", M_AMBER),
-        ("GATE 2 - THRESHOLD\ncos >= 0.148 ?", 'reject ->\n"Unknown"', "#fff4e0", M_AMBER),
-        ("GATE 3 - MARGIN\ntop1 - top2 >= 0.15 ?", 'reject ->\n"Uncertain"', "#fff4e0", M_AMBER),
-        ("GATE 4 - LIVENESS\nis the face moving ?", 'reject ->\n"Not live"', "#f8d7d2", M_RED),
-    ]
-    for i, (t, rej, fc, ec) in enumerate(gates):
-        x = 0.15 + i * 2.75
-        _box(ax, x, 1.2, 2.35, 0.9, t, fc, ec, 8, True)
-        ax.text(x + 1.17, 0.9, rej, ha="center", va="top", fontsize=7, color=M_RED)
-        if i < 3:
-            _arrow(ax, x + 2.35, 1.65, x + 2.75, 1.65, c=M_GREEN)
-    _box(ax, 11.2, 1.2, 0.45, 0.9, "OK", "#d5ecdf", M_GREEN, 9, True)
-    ax.text(5.9, 0.25, "The classifier has NO \"I don't know\" option — it always outputs a name.\n"
-                       "Every gate exists because a confident answer from a bad input is worse than no answer.",
-            fontsize=8.5, ha="center", color=M_RED, fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{FIG}/gates.png"); plt.close(fig)
-
-    # the attack, drawn (slide 2)
-    fig, ax = plt.subplots(figsize=(9.4, 2.2)); ax.axis("off")
-    ax.set_xlim(0, 9.4); ax.set_ylim(0, 2.2)
-    _box(ax, 0.1, 1.2, 1.6, 0.75, "REAL person\nat the camera", "#d5ecdf", M_GREEN)
-    _box(ax, 0.1, 0.2, 1.6, 0.75, "PHOTO of them,\nheld up", "#f8d7d2", M_RED)
-    _box(ax, 2.3, 0.7, 1.8, 0.8, "ArcFace\nembedding", "#eef4fb", M_GREY, 8, True)
-    _arrow(ax, 1.7, 1.57, 2.3, 1.3, c=M_GREEN)
-    _arrow(ax, 1.7, 0.57, 2.3, 0.9, c=M_RED)
-    _box(ax, 4.8, 0.7, 2.1, 0.8, "Nearly IDENTICAL\n512-d vectors", "#fff4e0", M_AMBER, 8, True)
-    _arrow(ax, 4.1, 1.1, 4.8, 1.1)
-    _box(ax, 7.6, 1.2, 1.7, 0.75, "Marked PRESENT", "#d5ecdf", M_GREEN)
-    _box(ax, 7.6, 0.2, 1.7, 0.75, "Marked PRESENT", "#f8d7d2", M_RED, 8, True)
-    _arrow(ax, 6.9, 1.3, 7.6, 1.57, c=M_GREEN)
-    _arrow(ax, 6.9, 0.9, 7.6, 0.57, c=M_RED)
-    ax.text(4.7, 2.06, "Face recognition is DESIGNED to do this — it is what makes it a good model.",
+    # the attack, drawn — slide 2 (PROJECT TITLE)
+    fig, ax = plt.subplots(figsize=(9.0, 2.3)); ax.axis("off")
+    ax.set_xlim(0, 9.0); ax.set_ylim(0, 2.3)
+    _box(ax, 0.1, 1.25, 1.6, 0.78, "REAL person\nat the camera", "#d5ecdf", M_GREEN)
+    _box(ax, 0.1, 0.22, 1.6, 0.78, "PHOTO of them,\nheld up", "#f8d7d2", M_RED)
+    _box(ax, 2.25, 0.72, 1.75, 0.82, "ArcFace\nembedding", "#eef4fb", M_GREY, 8, True)
+    _arrow(ax, 1.7, 1.64, 2.25, 1.35, c=M_GREEN)
+    _arrow(ax, 1.7, 0.61, 2.25, 0.9, c=M_RED)
+    _box(ax, 4.6, 0.72, 2.05, 0.82, "Nearly IDENTICAL\n512-d vectors", "#fff4e0", M_AMBER, 8, True)
+    _arrow(ax, 4.0, 1.13, 4.6, 1.13)
+    _box(ax, 7.25, 1.25, 1.65, 0.78, "Marked PRESENT", "#d5ecdf", M_GREEN)
+    _box(ax, 7.25, 0.22, 1.65, 0.78, "Marked PRESENT", "#f8d7d2", M_RED, 8, True)
+    _arrow(ax, 6.65, 1.35, 7.25, 1.64, c=M_GREEN)
+    _arrow(ax, 6.65, 0.9, 7.25, 0.61, c=M_RED)
+    ax.text(4.5, 2.16, "Face recognition is DESIGNED to do this — it is what makes it a good model.",
             fontsize=9, ha="center", color=M_RED, fontweight="bold")
     fig.tight_layout(); fig.savefig(f"{FIG}/attack.png"); plt.close(fig)
 
-    # results charts
-    fig, ax = plt.subplots(figsize=(3.7, 2.7))
+    # workflow flowchart — slide 7 (EXPERIMENTAL DETAILS), vertical like theirs
+    fig, ax = plt.subplots(figsize=(4.6, 6.0)); ax.axis("off")
+    ax.set_xlim(0, 4.6); ax.set_ylim(0, 6.0)
+    steps = [
+        ("1.  Face Input\n(Web Camera)", "#eef4fb", "#8fa3b8"),
+        ("2.  Face Detection\n(RetinaFace / SCRFD)", "#dce9f7", "#8fa3b8"),
+        ("3.  Feature Extraction\n(ArcFace → 512-d)", "#c9dcf3", "#8fa3b8"),
+        ("4.  Face Matching\n(cosine vs centroid)", "#b6cfef", "#8fa3b8"),
+        ("5.  FOUR GATES\nsize · threshold\nmargin · LIVENESS", "#f8d7d2", M_RED),
+        ("6.  Temporal Vote\n(3 frames agree)", "#d5ecdf", M_GREEN),
+        ("7.  Attendance Recorded\n(CSV file)", "#c3e5d1", M_GREEN),
+    ]
+    h, gap = 0.66, 0.18
+    for i, (label, fc, ec) in enumerate(steps):
+        y = 5.3 - i * (h + gap)
+        _box(ax, 0.15, y, 4.3, h, label, fc, ec, 8.5, "GATES" in label)
+        if i < len(steps) - 1:
+            _arrow(ax, 2.3, y, 2.3, y - gap, c="#595959")
+    ax.text(2.3, 0.05, "Steps 5–6 are our contribution.", fontsize=8,
+            ha="center", color=M_GREY, style="italic")
+    fig.tight_layout(); fig.savefig(f"{FIG}/workflow.png"); plt.close(fig)
+
+    # results charts — slide 8
+    fig, ax = plt.subplots(figsize=(3.8, 2.6))
     bars = ax.bar(["Recognition\nonly", "+ Liveness\n(ours)"], [100, 0],
                   color=[M_RED, M_GREEN], width=0.5)
     for b, v in zip(bars, [100, 0]):
@@ -149,21 +137,21 @@ def figures(ev, bm):
     fig.tight_layout(); fig.savefig(f"{FIG}/spoof.png"); plt.close(fig)
 
     rows = ev["ablation"]
-    fig, ax = plt.subplots(figsize=(5.2, 2.7))
+    fig, ax = plt.subplots(figsize=(4.6, 2.6))
     x = range(len(rows))
     ax.bar([i - 0.19 for i in x], [r["far"] for r in rows], 0.38,
            label="Strangers admitted", color=M_BLUE)
     ax.bar([i + 0.19 for i in x], [r["false_log_rate"] for r in rows], 0.38,
-           label="Wrong records", color="#8e5ad6")
+           label="Wrong records", color="#8064a2")
     ax.set_xticks(list(x))
-    ax.set_xticklabels(["Baseline", "+ Calibrated\nthreshold", "+ Top-2\nmargin",
-                        "+ Temporal\nvoting"], fontsize=7.5)
-    ax.set_ylabel("Error rate (%)"); ax.legend(fontsize=7.5, frameon=False)
+    ax.set_xticklabels(["Base", "+ Calib.\nthresh.", "+ Top-2\nmargin", "+ Temporal\nvote"],
+                       fontsize=7.5)
+    ax.set_ylabel("Error rate (%)"); ax.legend(fontsize=7, frameon=False)
     ax.set_title("Ablation — one guard at a time", fontsize=10, fontweight="bold")
     fig.tight_layout(); fig.savefig(f"{FIG}/ablation.png"); plt.close(fig)
 
     deg = ev["degradation"]
-    fig, ax = plt.subplots(figsize=(3.9, 2.7))
+    fig, ax = plt.subplots(figsize=(3.8, 2.6))
     ax.plot([d["face_px"] for d in deg], [d["accuracy"] * 100 for d in deg],
             "o-", color=M_BLUE, lw=2, ms=4)
     ax.axvspan(0, 40, color=M_RED, alpha=0.07)
@@ -172,27 +160,14 @@ def figures(ev, bm):
     ax.set_xlabel("Face width (pixels)"); ax.set_ylabel("Accuracy (%)")
     ax.set_title("Operating envelope", fontsize=10, fontweight="bold")
     fig.tight_layout(); fig.savefig(f"{FIG}/degradation.png"); plt.close(fig)
-
-    # cost (slide 6)
-    fig, ax = plt.subplots(figsize=(4.4, 2.3))
-    ax.barh(["PresenceAI\n(offline)", "Cloud face API\n(continuous)"], [0, 150000],
-            color=[M_GREEN, M_RED], height=0.45)
-    ax.set_xlabel("Recurring cost per school, per year (INR)")
-    ax.text(3000, 0, "= 0", va="center", fontsize=11, fontweight="bold", color=M_GREEN)
-    ax.text(146000, 1, "1,50,000  ", va="center", ha="right", fontsize=9.5,
-            fontweight="bold", color="white")
-    ax.set_title("...and the cloud uploads every student's face",
-                 fontsize=9, fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{FIG}/cost.png"); plt.close(fig)
-    print("  6 figures generated")
+    print("  5 figures generated")
 
 
-# ═══════════════════════════════════════════════════ TEMPLATE PRIMITIVES ══
+# ═════════════════════════════════════════════════════════════ PRIMITIVES ══
 def footer(s, n):
-    """Full-width blue bar + white slide number — the template's signature."""
     bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(6.95),
                              Inches(13.333), Inches(0.55))
-    bar.fill.solid(); bar.fill.fore_color.rgb = BAR
+    bar.fill.solid(); bar.fill.fore_color.rgb = BAR_BLUE
     bar.line.fill.background(); bar.shadow.inherit = False
     tb = s.shapes.add_textbox(Inches(12.3), Inches(7.02), Inches(0.85), Inches(0.4))
     p = tb.text_frame.paragraphs[0]
@@ -202,50 +177,60 @@ def footer(s, n):
     r.font.color.rgb = WHITE; r.font.name = BODY_FONT
 
 
-def heading(prs, title, size=34):
+def heading(prs, title, size=36):
+    """Navy, bold, centred, Times New Roman — exactly as in the team's deck."""
     s = prs.slides.add_slide(prs.slide_layouts[6])
-    tb = s.shapes.add_textbox(Inches(0.6), Inches(0.12), Inches(12.1), Inches(0.85))
-    tf = tb.text_frame; tf.word_wrap = True
-    p = tf.paragraphs[0]
+    tb = s.shapes.add_textbox(Inches(0.5), Inches(0.12), Inches(12.3), Inches(0.9))
+    p = tb.text_frame.paragraphs[0]
     p.text = title; p.alignment = PP_ALIGN.CENTER
     r = p.runs[0]
     r.font.size = Pt(size); r.font.bold = True
-    r.font.color.rgb = BLACK; r.font.name = HEAD_FONT
+    r.font.color.rgb = HEAD_NAVY; r.font.name = HEAD_FONT
     return s
 
 
-def bullets(s, items, l, t, w, h, size=14, center=False):
+def rbox(s, l, t, w, h, fill, line, lw=1.5):
+    shp = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(l), Inches(t),
+                             Inches(w), Inches(h))
+    if fill is None:
+        shp.fill.solid(); shp.fill.fore_color.rgb = WHITE
+    else:
+        shp.fill.solid(); shp.fill.fore_color.rgb = fill
+    shp.line.color.rgb = line; shp.line.width = Pt(lw)
+    shp.shadow.inherit = False
+    shp.text_frame.text = ""
+    return shp
+
+
+def chevron(s, l, t, w, h, fill, label):
+    shp = s.shapes.add_shape(MSO_SHAPE.CHEVRON, Inches(l), Inches(t), Inches(w), Inches(h))
+    shp.fill.solid(); shp.fill.fore_color.rgb = fill
+    shp.line.fill.background(); shp.shadow.inherit = False
+    tf = shp.text_frame
+    tf.word_wrap = True
+    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    p = tf.paragraphs[0]
+    p.text = label; p.alignment = PP_ALIGN.CENTER
+    r = p.runs[0]
+    r.font.size = Pt(13); r.font.bold = True
+    r.font.color.rgb = WHITE; r.font.name = BODY_FONT
+    return shp
+
+
+def text(s, items, l, t, w, h, size=14, center=False, italic=False):
     tf = s.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(h)).text_frame
     tf.word_wrap = True
+    tf.vertical_anchor = MSO_ANCHOR.TOP
     for i, item in enumerate(items):
         body, bold, col, lvl = (item if isinstance(item, tuple) else (item, False, INK, 0))
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.text = body; p.level = lvl; p.space_after = Pt(6)
+        p.text = body; p.level = lvl; p.space_after = Pt(5)
         if center:
             p.alignment = PP_ALIGN.CENTER
         for r in p.runs:
-            r.font.size = Pt(size); r.font.bold = bold
+            r.font.size = Pt(size); r.font.bold = bold; r.font.italic = italic
             r.font.color.rgb = col; r.font.name = BODY_FONT
     return tf
-
-
-def table(s, data, l, t, w, h, widths, green_col=None):
-    tbl = s.shapes.add_table(len(data), len(data[0]), Inches(l), Inches(t),
-                             Inches(w), Inches(h)).table
-    for i, cw in enumerate(widths):
-        tbl.columns[i].width = Inches(cw)
-    for r, row in enumerate(data):
-        for c, v in enumerate(row):
-            cell = tbl.cell(r, c); cell.text = str(v)
-            runs = cell.text_frame.paragraphs[0].runs
-            if not runs:
-                continue
-            run = runs[0]
-            run.font.size = Pt(11); run.font.name = BODY_FONT
-            run.font.bold = (r == 0) or (c == 0 and r > 0)
-            if green_col is not None and c == green_col and r > 0:
-                run.font.color.rgb = GREEN; run.font.bold = True
-    return tbl
 
 
 # ═══════════════════════════════════════════════════════════════════ MAIN ══
@@ -257,7 +242,7 @@ def main():
     prs = Presentation()
     prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
 
-    # ── 1 · TITLE PAGE ──────────────────────────────────────────────────────
+    # ── TITLE PAGE (no number, exactly as theirs) ───────────────────────────
     s = prs.slides.add_slide(prs.slide_layouts[6])
     tb = s.shapes.add_textbox(Inches(0.8), Inches(0.45), Inches(11.7), Inches(1.5))
     tf = tb.text_frame; tf.word_wrap = True
@@ -265,213 +250,300 @@ def main():
                               "MULTIPLE FACE RECOGNITION"]):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.text = line; p.alignment = PP_ALIGN.CENTER
-        r = p.runs[0]; r.font.size = Pt(34); r.font.bold = True
-        r.font.color.rgb = NAVY; r.font.name = HEAD_FONT
+        r = p.runs[0]; r.font.size = Pt(36); r.font.bold = True
+        r.font.color.rgb = HEAD_NAVY; r.font.name = HEAD_FONT
 
-    bullets(s, [
-        ("Problem Statement Title -  Recognition alone cannot stop proxy attendance:", True, BLACK, 0),
-        ("a printed photo is marked present 100% of the time.", True, RED, 0),
-    ], 2.2, 1.9, 9.0, 0.8, size=14)
-
-    bullets(s, [
-        ("Team Members' Name and Roll Number -", True, BLACK, 0),
-        "        1. Souryadeep Deb (13000222064)            2. Soham Bhattacharya (13000222065)",
-        "        3. Srija Basak (13000222066)                4. Sneha Singh (13000222067)",
+    text(s, [
+        ("Team Members' Name and Roll Number-", True, BLACK, 0),
         "",
-        ("Group Number -  18", True, BLACK, 0),
+        ("          1. Souryadeep Deb (13000222064)              2. Soham Bhattacharya (13000222065)", True, BLACK, 0),
         "",
-        ("Mentor Name -  Mr Prodipta Bhowmik", True, BLACK, 0),
-    ], 2.2, 2.85, 9.0, 2.5, size=14)
+        ("          3. Srija Basak (13000222066)                  4. Sneha Singh (13000222067)", True, BLACK, 0),
+        "",
+        ("Group Number-  18", True, BLACK, 0),
+        "",
+        ("Mentor Name-  Mr Prodipta Bhowmik", True, BLACK, 0),
+    ], 1.8, 2.1, 10.0, 3.0, size=14)
 
-    bullets(s, [
+    text(s, [
         ("Department of Information Technology", True, BLACK, 0),
         ("Techno Main Salt Lake", True, BLACK, 0),
         ("Kolkata -700091", True, BLACK, 0),
-    ], 4.4, 5.45, 4.6, 1.3, size=13, center=True)
+    ], 4.4, 5.5, 4.6, 1.3, size=14, center=True)
 
-    # ── 2 · IDEA TITLE ──────────────────────────────────────────────────────
-    s = heading(prs, "IDEA TITLE")
-    bullets(s, [("❖ Proposed Solution", True, NAVY, 0)], 0.6, 1.0, 12.1, 0.4, size=19)
-    bullets(s, [
-        "•  Detect and recognise EVERY face in one frame  (RetinaFace + ArcFace, 512-d).",
-        "•  A face must pass FOUR gates — size, threshold, margin, liveness — before it gets a name.",
-        "•  Attendance is committed only when 3 frames agree.  Runs offline on a laptop CPU.",
-    ], 0.75, 1.45, 12.0, 1.1, size=14)
+    # ── 1 · PROJECT TITLE ──────────────────────────────────────────────────
+    s = heading(prs, "PROJECT TITLE")
+    text(s, [("Automatic Attendance System using Multiple Face Recognition", False, HEAD_NAVY, 0)],
+         1.0, 1.15, 11.3, 0.5, size=20, center=True, italic=True)
+    text(s, [("Spoof-Resistant Multi-Face Attendance with Liveness-Gated Commit", True, RED, 0)],
+         1.0, 1.75, 11.3, 0.45, size=15, center=True)
+    s.shapes.add_picture(f"{FIG}/attack.png", Inches(2.1), Inches(2.4), width=Inches(9.1))
+    rbox(s, 2.1, 5.3, 9.1, 1.05, None, O_RED, 1.5)
+    text(s, [
+        ("We tested it: a printed photograph was marked present 100% of the time.", True, RED, 0),
+        ("This project is about closing that gap.", False, INK, 0),
+    ], 2.3, 5.45, 8.7, 0.85, size=14, center=True)
 
-    bullets(s, [("❖ How it addresses the problem", True, NAVY, 0)], 0.6, 2.6, 12.1, 0.4, size=19)
-    s.shapes.add_picture(f"{FIG}/attack.png", Inches(1.9), Inches(3.05), width=Inches(9.5))
+    # ── 2 · OBJECTIVE OF THE PROJECT ───────────────────────────────────────
+    s = heading(prs, "OBJECTIVE OF THE PROJECT")
+    objectives = [
+        ("To detect and recognise multiple faces simultaneously in a single frame.", O_GREEN),
+        ("To reject strangers — an open-set system that is allowed to answer \"nobody\".", O_RED),
+        ("To resist presentation attacks: a photo or phone screen must NOT be marked present.", O_BLUE),
+        ("To make the attendance commit reliable — it is written once a day and cannot be undone.", O_ORANGE),
+        ("To run offline on a laptop CPU: no GPU, no cloud, no student data leaving campus.", O_PURPLE),
+    ]
+    for i, (t, col) in enumerate(objectives):
+        y = 1.3 + i * 1.08
+        rbox(s, 2.6, y, 8.6, 0.85, None, col, 1.75)
+        text(s, [(t, False, INK, 0)], 2.85, y + 0.19, 8.1, 0.6, size=14, italic=True)
+        # the connector rails from their original slide
+        bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(2.15), Inches(y + 0.38),
+                                 Inches(0.42), Inches(0.05))
+        bar.fill.solid(); bar.fill.fore_color.rgb = col
+        bar.line.fill.background(); bar.shadow.inherit = False
 
-    bullets(s, [("❖ Innovation and uniqueness", True, NAVY, 0)], 0.6, 5.2, 12.1, 0.4, size=19)
-    bullets(s, [
-        ("•  We do NOT claim a new face model — ArcFace is pretrained and frozen.", True, RED, 0),
-        "•  Liveness that works at 1.4 frames/sec, where blink detection provably fails.",
-        "•  Threshold calibrated on 2,880 impostor faces — not hand-picked.",
-        "•  Attendance treated as an irreversible commit.   Enrolment:  607 s → 1.4 s.",
-    ], 0.75, 5.65, 12.0, 1.2, size=13)
+    # ── 3 · PROBLEM DEFINITION ─────────────────────────────────────────────
+    s = heading(prs, "PROBLEM DEFINITION")
+    rbox(s, 0.7, 1.15, 11.9, 0.95, BOX_BLUE, LIT_LINE, 1.25)
+    text(s, [
+        ("Traditional manual attendance is slow, error-prone and vulnerable to proxy marking —", False, BLACK, 0),
+        ("a 60-student roll-call costs ~5 minutes of every lecture, about 80 teaching hours a year.", False, BLACK, 0),
+    ], 0.95, 1.3, 11.4, 0.8, size=14, italic=True)
 
-    # ── 3 · TECHNICAL APPROACH (1/2) ────────────────────────────────────────
-    s = heading(prs, "TECHNICAL APPROACH & WORKFLOW DIAGRAM", 29)
-    bullets(s, [("❖ Technologies used", True, NAVY, 0)], 0.6, 0.9, 12.1, 0.4, size=18)
-    table(s, [
-        ["Layer", "Technology"],
-        ["Language", "Python 3.13"],
-        ["Face detection", "RetinaFace / SCRFD (det_10g)"],
-        ["Recognition", "ArcFace ResNet-50 (buffalo_l) → 512-d embedding"],
-        ["Runtime", "ONNX Runtime — CPU only, NO GPU"],
-        ["Classifier", "Linear SVM + cosine-to-centroid (scikit-learn)"],
-        ["Backend / Frontend", "Flask REST API (token auth) · React + Vite + Tailwind"],
-        ["Storage", "CSV + JSON on disk — no cloud, no database server"],
-    ], 0.7, 1.35, 7.5, 2.7, [2.1, 5.4])
+    rbox(s, 0.7, 2.35, 11.9, 1.5, RGBColor(0xF8, 0xD7, 0xD2), O_RED, 1.75)
+    text(s, [
+        ("But automating it with face recognition introduces a NEW problem — and this is the gap "
+         "our project addresses:", True, BLACK, 0),
+        ("Face recognition is DESIGNED to give a photo of you the same embedding as you. That is "
+         "exactly what makes it a good face model.", False, RED, 0),
+        ("So recognition ALONE cannot prevent proxy attendance. We measured it: a printed photo was "
+         "marked present 100% of the time.", True, RED, 0),
+    ], 0.95, 2.5, 11.4, 1.35, size=13)
 
-    bullets(s, [
-        ("❖ The model is FROZEN", True, NAVY, 0),
-        "•  Pretrained on ~600,000 identities. It never learns",
-        "   \"who is Soham\" — it learns what makes any two",
-        "   faces different.",
-        "•  Enrolling a student = embed their photos, store the",
-        "   average vector (a centroid). No training. No GPU.",
-        ("•  Embeddings cached → enrolment 607 s → 1.4 s", True, GREEN, 0),
+    rbox(s, 0.7, 4.1, 11.9, 2.55, BOX_ORANGE, O_ORANGE, 1.25)
+    text(s, [
+        ("Four failures a real classroom deployment must survive:", False, BLACK, 0),
         "",
-        ("❖ Open-set, not closed-set", True, NAVY, 0),
-        "•  Prior work:  \"WHICH of my N students is this?\"",
-        "   — a softmax MUST name someone.",
-        ("•  Ours:  \"Is this ANY of my students?\"", True, INK, 0),
-        ("   — allowed to answer \"nobody\".", True, INK, 0),
-    ], 8.4, 1.35, 4.5, 3.0, size=11.5)
+        ("•   A photograph or phone screen held to the camera  →  marked present", False, BLACK, 0),
+        ("•   A stranger walking past  →  a softmax classifier has no way to say \"nobody\"", False, BLACK, 0),
+        ("•   A student at the back of the room  →  too few pixels to identify, but still named", False, BLACK, 0),
+        ("•   One misread frame  →  the wrong student marked present for the entire day", False, BLACK, 0),
+    ], 0.95, 4.25, 11.4, 2.35, size=14)
 
-    bullets(s, [("❖ Workflow", True, NAVY, 0)], 0.6, 4.25, 12.1, 0.4, size=18)
-    s.shapes.add_picture(f"{FIG}/workflow.png", Inches(0.45), Inches(4.7), width=Inches(12.4))
+    # ── 4 · LITERATURE REVIEW ──────────────────────────────────────────────
+    s = heading(prs, "LITERATURE REVIEW")
+    lits = [
+        ("D'Souza et al. (2019) [1] ", "proposed an automated attendance system using facial recognition "
+                                       "with histogram-based feature extraction; efficient, but sensitive to lighting and pose."),
+        ("Arsenovic et al. (2017) [2] ", "applied CNN-based deep learning for face recognition, achieving "
+                                         "higher accuracy and real-time performance."),
+        ("Kakarla et al. (2020) [3] ", "proposed a CNN smart attendance system recognising multiple students "
+                                       "under moderate pose and expression change."),
+        ("Varadharajan et al. (2016) [4] ", "developed a face-detection classroom attendance system; accuracy "
+                                            "drops under occlusion and poor lighting."),
+        ("Siswanto et al. (2014) [5] ", "introduced face biometrics as a hygienic alternative to fingerprint "
+                                        "attendance systems."),
+    ]
+    for i, (who, what) in enumerate(lits):
+        y = 1.15 + i * 0.92
+        rbox(s, 0.7, y, 11.9, 0.8, LIT_FILL, LIT_LINE, 1.0)
+        tf = s.shapes.add_textbox(Inches(0.95), Inches(y + 0.1), Inches(11.4), Inches(0.62)).text_frame
+        tf.word_wrap = True
+        p = tf.paragraphs[0]
+        r1 = p.add_run(); r1.text = who
+        r1.font.size = Pt(13); r1.font.bold = True; r1.font.name = BODY_FONT
+        r1.font.color.rgb = BLACK
+        r2 = p.add_run(); r2.text = what
+        r2.font.size = Pt(13); r2.font.name = BODY_FONT; r2.font.color.rgb = INK
 
-    # ── 4 · TECHNICAL APPROACH (2/2) ────────────────────────────────────────
-    s = heading(prs, "TECHNICAL APPROACH — DECISION PIPELINE", 29)
-    bullets(s, [("❖ Four gates before a face gets a name", True, NAVY, 0)],
-            0.6, 0.9, 12.1, 0.4, size=18)
-    s.shapes.add_picture(f"{FIG}/gates.png", Inches(0.45), Inches(1.35), width=Inches(12.4))
+    rbox(s, 0.7, 5.8, 11.9, 0.9, RGBColor(0xF8, 0xD7, 0xD2), O_RED, 1.75)
+    text(s, [
+        ("RESEARCH GAP —  every paper above reports one accuracy number on clean data. None test a "
+         "presentation attack, none report a stranger-rejection rate, and none treat \"recognised\" and "
+         "\"marked present\" as different decisions.", True, RED, 0),
+    ], 0.95, 5.95, 11.4, 0.75, size=12.5)
 
-    bullets(s, [
-        ("❖ Then: 3 frames must agree → attendance is written  "
-         "(once per day, and irreversible)", True, NAVY, 0),
-    ], 0.6, 3.85, 12.1, 0.4, size=15)
+    # ── 5 · PROPOSED METHODOLOGY ───────────────────────────────────────────
+    s = heading(prs, "PROPOSED METHODOLOGY")
+    text(s, [("Proposed Solution", True, RGBColor(0x9E, 0x2B, 0x25), 0)],
+         0.6, 3.1, 2.4, 0.5, size=18, center=True)
+    ar = s.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, Inches(0.7), Inches(3.65),
+                            Inches(2.2), Inches(0.45))
+    ar.fill.solid(); ar.fill.fore_color.rgb = RGBColor(0xD6, 0xDC, 0xE5)
+    ar.line.fill.background(); ar.shadow.inherit = False
+    ar.text_frame.text = ""
 
-    bullets(s, [
-        ("❖ Liveness — why not blink detection?", True, NAVY, 0),
-        "•  A blink lasts 0.3 s.  We sample 1.4 frames/sec.",
-        "   We measured blink detection FAILING.",
-        "•  Instead we measure facial motion from the 106",
-        "   landmarks the detector already produces for free.",
-        "•  Rotation and scale are normalised out — so shaking",
-        "   the photo does not help the attacker.",
-        ("•  No extra model.  No extra compute.  No GPU.", True, GREEN, 0),
-    ], 0.75, 4.35, 7.3, 2.4, size=12.5)
+    blocks = [
+        ("How it Works:", RGBColor(0x9C, 0xB9, 0x3A), [
+            "•  Detects EVERY face in one frame (RetinaFace), embeds each into a 512-d vector (ArcFace),",
+            "   and matches it against each enrolled student's centroid.",
+            "•  Records name, confidence and status to a CSV file. Nothing leaves the machine.",
+        ]),
+        ("Problem Addressed:", RGBColor(0x45, 0xA3, 0xAF), [
+            "•  Replaces manual attendance and eliminates the signed-register proxy.",
+            "•  Rejects strangers, and blocks the photo / screen proxy that defeats ordinary",
+            "   face recognition.",
+        ]),
+        ("Innovation and uniqueness of the solution", RGBColor(0x7B, 0x5E, 0xA7), [
+            "•  We do NOT claim a new face model — ArcFace is pretrained and FROZEN.",
+            "•  LIVENESS that works at 1.4 frames/sec, where blink detection provably fails.",
+            "•  Threshold calibrated on 2,880 impostor faces — not hand-picked.",
+            "•  Attendance as an irreversible commit.  Enrolment: 607 s → 1.4 s.",
+            "•  We also report a guard that did NOT work (top-2 margin).",
+        ]),
+    ]
+    y = 1.2
+    for label, col, lines in blocks:
+        h = 1.75 if "Innovation" in label else 1.5
+        chevron(s, 3.3, y, 2.9, h, col, label)
+        text(s, [(l, False, INK, 0) for l in lines], 6.45, y + 0.18, 6.4, h - 0.25, size=12)
+        y += h + 0.2
 
-    table(s, [
-        ["Motion score", "Value"],
-        ["Photo held up (hand-shake)", "0.015"],
-        ["Arnab, live", "0.066"],
-        ["Soham, live", "0.135"],
-        ["Threshold", "0.035"],
-    ], 8.3, 4.4, 4.5, 1.7, [2.9, 1.6])
+    # ── 6 · EXPERIMENTAL DETAILS ───────────────────────────────────────────
+    s = heading(prs, "EXPERIMENTAL DETAILS")
+    rbox(s, 0.5, 1.1, 6.9, 0.55, RGBColor(0x7B, 0x5E, 0xA7), RGBColor(0x7B, 0x5E, 0xA7))
+    text(s, [("Programming Language:  Python 3.13", True, WHITE, 0)],
+         0.7, 1.2, 6.5, 0.4, size=14)
 
-    bullets(s, [
-        ("Protocol:  96 identities → 30 STUDENTS (70% enrol / 30% test)  +  "
-         "66 STRANGERS (half calibrate / half measure the FAR).", True, RED, 0),
-    ], 8.3, 6.2, 4.5, 0.6, size=10)
+    rows = [
+        ("Face Detection", "RetinaFace / SCRFD  (det_10g)"),
+        ("Recognition", "ArcFace ResNet-50 (buffalo_l) → 512-d embedding"),
+        ("Runtime", "ONNX Runtime — CPU only, NO GPU"),
+        ("Classifier", "Linear SVM + cosine-to-centroid  (scikit-learn)"),
+        ("Frontend", "React · Vite · TailwindCSS"),
+        ("Backend", "Flask REST API  (Bearer-token auth)"),
+        ("Storage", "CSV + JSON on disk — no cloud, no database server"),
+    ]
+    for i, (k, v) in enumerate(rows):
+        y = 1.85 + i * 0.62
+        rbox(s, 0.5, y, 2.0, 0.52, LIT_FILL, LIT_LINE, 1.0)
+        text(s, [(k, True, BLACK, 0)], 0.6, y + 0.12, 1.85, 0.35, size=12)
+        rbox(s, 2.6, y, 4.8, 0.52, None, LIT_LINE, 1.0)
+        text(s, [(v, False, INK, 0)], 2.75, y + 0.12, 4.6, 0.35, size=11.5)
 
-    # ── 5 · RESULTS ─────────────────────────────────────────────────────────
-    s = heading(prs, "RESULTS")
-    s.shapes.add_picture(f"{FIG}/spoof.png", Inches(0.5), Inches(0.95), height=Inches(2.35))
-    s.shapes.add_picture(f"{FIG}/ablation.png", Inches(4.35), Inches(0.95), height=Inches(2.35))
-    s.shapes.add_picture(f"{FIG}/degradation.png", Inches(9.4), Inches(0.95), height=Inches(2.35))
+    s.shapes.add_picture(f"{FIG}/workflow.png", Inches(8.15), Inches(1.1), height=Inches(5.55))
+    text(s, [("WORKFLOW", True, LIT_LINE, 0)], 8.15, 6.6, 4.6, 0.35, size=14, center=True)
 
-    table(s, [
-        ["Metric", "Before", "After"],
-        ["Photo marked present (attack success)", "100%", "0%"],
-        ["Strangers admitted (FAR)", "0.81%", "0.20%"],
-        ["Wrong attendance records", "3.54%", "0%"],
-        ["Time to enrol a student", "607 s", "1.4 s"],
-        ["Time to mark a student present", "10.5 s", "2.8 s"],
-    ], 0.5, 3.55, 7.3, 2.6, [3.9, 1.7, 1.7], green_col=2)
+    # ── 7 · RESULTS AND ANALYSIS ───────────────────────────────────────────
+    s = heading(prs, "RESULTS AND ANALYSIS")
+    s.shapes.add_picture(f"{FIG}/spoof.png", Inches(0.55), Inches(1.0), height=Inches(2.3))
+    s.shapes.add_picture(f"{FIG}/ablation.png", Inches(4.55), Inches(1.0), height=Inches(2.3))
+    s.shapes.add_picture(f"{FIG}/degradation.png", Inches(9.15), Inches(1.0), height=Inches(2.3))
 
-    bullets(s, [
-        ("❖ Key findings", True, NAVY, 0),
-        "•  Calibrating the threshold cut strangers admitted 4×.",
-        "•  Temporal voting drove wrong records to zero.",
-        ("•  The top-2 margin guard did NOT help — we report it.", True, RED, 0),
+    caps = [
+        (0.5, O_RED, "Presentation Attack", [
+            "A printed photo was marked present 100% of the",
+            "time by recognition alone.",
+            "With liveness — motion measured from the",
+            "detector's own landmarks — it is 0%.",
+        ]),
+        (4.5, O_GREEN, "Ablation of Each Guard", [
+            "Calibrating the threshold cut strangers admitted",
+            "4× (0.81% → 0.20%).",
+            "Temporal voting drove wrong attendance records",
+            "to zero (3.54% → 0%).",
+        ]),
+        (8.5, O_PURPLE, "Operating Envelope", [
+            "Accuracy collapses below 24 px and is fully",
+            "recovered by 40 px — so faces under 40 px are",
+            "refused, not guessed at.",
+            "One 1080p camera therefore covers about 7 m.",
+        ]),
+    ]
+    for x, col, title, lines in caps:
+        rbox(s, x, 3.5, 4.3, 2.05, None, col, 1.75)
+        text(s, [(title, True, col, 0)], x + 0.2, 3.6, 3.9, 0.35, size=13, center=True)
+        text(s, [(l, False, INK, 0) for l in lines], x + 0.2, 4.0, 3.9, 1.45, size=11)
+
+    rbox(s, 0.5, 5.75, 12.3, 0.9, RGBColor(0xF8, 0xD7, 0xD2), O_RED, 1.5)
+    text(s, [
+        ("Honest limitation —  a VIDEO replay of a real person would still pass, because a recorded "
+         "face genuinely moves. We raise the attack cost from \"print a photo\" to \"record and replay "
+         "a video\": a real gain, not a complete defence.", True, RED, 0),
+    ], 0.75, 5.9, 11.9, 0.75, size=12)
+
+    # ── 8 · CONCLUSION ─────────────────────────────────────────────────────
+    s = heading(prs, "CONCLUSION")
+    rbox(s, 0.55, 1.2, 3.3, 1.95, None, O_BLUE, 1.5)
+    text(s, [
+        ("A pretrained face model is NOT an attendance system.", True, HEAD_NAVY, 0),
         "",
-        ("❖ Capacity  (laptop CPU, no GPU)", True, NAVY, 0),
-        f"•  16 faces in one frame:  {bm['throughput'][-1]['latency_s']} s",
-        "•  10,000 enrolled students:  +1.2 ms per match",
-        "•  One 1080p camera covers ~7 m — a whole classroom",
-        "",
-        ("❖ Limitation:  a VIDEO replay would still pass.", True, RED, 0),
-    ], 8.1, 3.55, 4.8, 3.2, size=12)
+        ("It fails in three measurable ways — and each one is fixable in the decision layer, "
+         "not the model.", False, INK, 0),
+    ], 0.75, 1.35, 2.9, 1.75, size=12.5)
 
-    # ── 6 · IMPACT AND BENEFITS ─────────────────────────────────────────────
-    s = heading(prs, "IMPACT AND BENEFITS")
-    bullets(s, [("❖ Potential impact on the target audience", True, NAVY, 0)],
-            0.6, 0.95, 12.1, 0.4, size=18)
-    bullets(s, [
-        "•  A 60-student roll-call costs ~5 minutes of every lecture — about 80 teaching hours a year, returned.",
-        "•  Target: schools that cannot afford a GPU or a cloud subscription — and cannot legally upload their "
-        "students' faces to one.",
-    ], 0.75, 1.4, 12.0, 0.9, size=13)
-
-    bullets(s, [("❖ Benefits of the solution", True, NAVY, 0)], 0.6, 2.35, 12.1, 0.4, size=18)
-    bullets(s, [
-        ("SOCIAL", True, NAVY, 0),
-        "•  Contactless — no queue, no register passed around.",
-        "•  Manual proxy eliminated.",
-        ("•  Photo proxy blocked:   100% → 0%.", True, GREEN, 0),
-        ("•  Video-replay proxy NOT yet blocked — stated, not hidden.", True, RED, 0),
+    rbox(s, 0.55, 3.45, 3.3, 2.4, None, O_PURPLE, 1.5)
+    text(s, [
+        ("Limitations", True, RED, 0),
         "",
-        ("PRIVACY & LEGAL", True, NAVY, 0),
-        "•  Runs fully offline — student faces never leave the campus.",
-        "•  Under India's DPDP Act 2023, biometric data is sensitive personal data.",
-        "   Uploading children's faces to a cloud is a liability, not a feature.",
-    ], 0.75, 2.8, 8.0, 3.7, size=12.5)
+        ("•  A video replay would still pass.", False, INK, 0),
+        ("•  The look-alike guard is unproven.", False, INK, 0),
+        ("•  Only 2 real users enrolled — all numbers come from the 30-identity cohort.", False, INK, 0),
+    ], 0.75, 3.6, 2.9, 2.2, size=11.5)
 
-    bullets(s, [("ECONOMIC", True, NAVY, 0)], 8.9, 2.8, 4.0, 0.35, size=12.5)
-    s.shapes.add_picture(f"{FIG}/cost.png", Inches(8.9), Inches(3.2), width=Inches(4.0))
-    bullets(s, [
-        "•  One laptop + one webcam.  No GPU, no servers.",
-        ("•  Recurring cost = 0.", True, GREEN, 0),
-    ], 8.9, 5.4, 4.0, 0.9, size=12)
+    concl = [
+        ("Automation", RGBColor(0xC0, 0x50, 0x4D),
+         "Detects and identifies every face in one frame.  Enrolling a new student takes 1.4 s "
+         "(was 607 s) — no retraining, no GPU."),
+        ("Integrity", RGBColor(0x9B, 0xBB, 0x59),
+         "Manual proxy eliminated.  Photo / screen proxy BLOCKED by liveness: attack success "
+         "100% → 0%.  Strangers admitted: 0.20%."),
+        ("Precision", RGBColor(0x80, 0x64, 0xA2),
+         "Open-set rejection with a threshold calibrated on 2,880 impostor faces.  Faces under "
+         "40 px are refused, not guessed.  Wrong attendance records: 0%."),
+        ("Efficiency", RGBColor(0x4B, 0xAC, 0xC6),
+         "16 faces in one frame in 1.3 s on a laptop CPU.  Fully offline — no cloud, no GPU, "
+         "no recurring cost."),
+    ]
+    y = 1.2
+    for label, col, body in concl:
+        chevron(s, 4.15, y, 1.5, 1.35, col, label)
+        rbox(s, 5.9, y + 0.1, 6.9, 1.15, None, col, 1.25)
+        text(s, [(body, False, INK, 0)], 6.05, y + 0.22, 6.6, 1.0, size=11.5)
+        y += 1.45
 
-    # ── 7 · RESEARCH AND REFERENCES ─────────────────────────────────────────
-    s = heading(prs, "RESEARCH AND REFERENCES")
-    bullets(s, [
-        ("❖ Attendance systems — prior work (none of which tests a presentation attack)", True, NAVY, 0),
-        "[1]  D'Souza, J. W. S., et al. (2019). Automated Attendance Marking and Management System by Facial "
-        "Recognition Using Histogram. Array, 3–4: 100014.   DOI: 10.1016/j.array.2019.100014",
-        "[2]  Arsenovic, M., et al. (2017). FaceTime — Deep Learning Based Face Recognition Attendance System. "
-        "IEEE SISY 2017, pp. 53–58.   DOI: 10.1109/SISY.2017.8080587",
-        "[3]  Kakarla, S., et al. (2020). Smart Attendance Management System Based on Face Recognition Using CNN. "
-        "IEEE-HYDCON 2020.   DOI: 10.1109/HYDCON48903.2020.9242847",
-        "[4]  Varadharajan, E., et al. (2016). Automatic Attendance Management System Using Face Detection. "
-        "IC-GET 2016, pp. 1–3.   DOI: 10.1109/GET.2016.7916753",
-        "[5]  Siswanto, A. R. S., et al. (2014). Implementation of Face Recognition Algorithm for Biometrics Based "
-        "Time Attendance System. ICISS 2014, pp. 149–154.   DOI: 10.1109/ICTSS.2014.7013165",
-        "",
-        ("❖ Models used — pretrained and frozen (not our contribution)", True, NAVY, 0),
-        "[6]  Deng, J., Guo, J., Xue, N., Zafeiriou, S. (2019). ArcFace: Additive Angular Margin Loss for Deep Face "
-        "Recognition. CVPR 2019, pp. 4690–4699.   DOI: 10.1109/CVPR.2019.00482",
-        "[7]  Deng, J., et al. (2020). RetinaFace: Single-Shot Multi-Level Face Localisation in the Wild. "
-        "CVPR 2020.   DOI: 10.1109/CVPR42600.2020.00525",
-        "[8]  Cao, Q., et al. (2018). VGGFace2: A Dataset for Recognising Faces across Pose and Age. "
-        "IEEE FG 2018, pp. 67–74.",
-        "",
-        ("❖ Presentation attacks — the gap this project addresses", True, RED, 0),
-        "[9]   Pan, G., Sun, L., Wu, Z., Lao, S. (2007). Eyeblink-based Anti-Spoofing in Face Recognition from a "
-        "Generic Webcamera. ICCV 2007, pp. 1–8.   DOI: 10.1109/ICCV.2007.4409068",
-        "[10] ISO/IEC 30107-3:2023 — Biometric presentation attack detection — Part 3: Testing and reporting.",
-        "",
-        ("❖ Source code and all measurement scripts:", True, NAVY, 0),
-        ("       github.com/SohamBhattacharjee2003/MutiFace-Attendance-System", True, GREEN, 0),
-    ], 0.6, 0.95, 12.2, 5.9, size=10.5)
+    # ── 9 · REFERENCES ─────────────────────────────────────────────────────
+    s = heading(prs, "REFERENCES")
+    refs = [
+        "1.  D'Souza, J. W. S., et al. (2019). Automated Attendance Marking and Management System by Facial "
+        "Recognition Using Histogram. Array, 3–4: 100014.  DOI: 10.1016/j.array.2019.100014",
+        "2.  Arsenovic, M., Sladojevic, S., Anderla, A., Stefanovic, D. (2017). FaceTime — Deep Learning Based "
+        "Face Recognition Attendance System. IEEE SISY 2017, pp. 53–58.  DOI: 10.1109/SISY.2017.8080587",
+        "3.  Kakarla, S., Gangula, P., Rahul, M. S., Singh, C. S. C., Sarma, T. H. (2020). Smart Attendance "
+        "Management System Based on Face Recognition Using CNN. IEEE-HYDCON 2020, pp. 1–5.  "
+        "DOI: 10.1109/HYDCON48903.2020.9242847",
+        "4.  Varadharajan, E., Dharani, R., Jeevitha, S., Kavinmathi, B., Hemalatha, S. (2016). Automatic Attendance "
+        "Management System Using Face Detection. IC-GET 2016, pp. 1–3.  DOI: 10.1109/GET.2016.7916753",
+        "5.  Siswanto, A. R. S., Nugroho, A. S., Galinium, M. (2014). Implementation of Face Recognition Algorithm "
+        "for Biometrics Based Time Attendance System. ICISS 2014, pp. 149–154.  DOI: 10.1109/ICTSS.2014.7013165",
+        "6.  Deng, J., Guo, J., Xue, N., Zafeiriou, S. (2019). ArcFace: Additive Angular Margin Loss for Deep Face "
+        "Recognition. CVPR 2019, pp. 4690–4699.  DOI: 10.1109/CVPR.2019.00482    ← the model this system uses",
+        "7.  Deng, J., Guo, J., Ververas, E., Kotsia, I., Zafeiriou, S. (2020). RetinaFace: Single-Shot Multi-Level "
+        "Face Localisation in the Wild. CVPR 2020.  DOI: 10.1109/CVPR42600.2020.00525",
+        "8.  Pan, G., Sun, L., Wu, Z., Lao, S. (2007). Eyeblink-based Anti-Spoofing in Face Recognition from a "
+        "Generic Webcamera. ICCV 2007, pp. 1–8.  DOI: 10.1109/ICCV.2007.4409068",
+        "9.  ISO/IEC 30107-3:2023 — Biometric presentation attack detection — Part 3: Testing and reporting.",
+    ]
+    for i, r in enumerate(refs):
+        y = 1.1 + i * 0.63
+        rbox(s, 0.5, y, 12.3, 0.55, None, LIT_LINE, 1.0)
+        col = RED if i in (5, 7, 8) else INK
+        text(s, [(r, False, col, 0)], 0.65, y + 0.09, 12.0, 0.42, size=10)
 
+    # ── 10 · THANK YOU ─────────────────────────────────────────────────────
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    tb = s.shapes.add_textbox(Inches(0.8), Inches(2.9), Inches(11.7), Inches(1.4))
+    p = tb.text_frame.paragraphs[0]
+    p.text = "THANK YOU"; p.alignment = PP_ALIGN.CENTER
+    r = p.runs[0]
+    r.font.size = Pt(54); r.font.bold = True; r.font.italic = True
+    r.font.color.rgb = BLACK; r.font.name = HEAD_FONT
+
+    # slide numbers start at 1 on PROJECT TITLE, exactly as in the original deck
     for i, sl in enumerate(prs.slides):
         if i:
-            footer(sl, i + 1)
+            footer(sl, i)
 
     prs.save(OUT)
     print(f"\n✅ {OUT}   ({len(prs.slides._sldIdLst)} slides)")
