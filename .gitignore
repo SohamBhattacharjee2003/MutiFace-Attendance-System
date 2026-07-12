@@ -14,3 +14,6 @@ __pycache__/
 *.pyc
 # regenerable embedding cache (large, derived biometric data)
 Server/models/arcface_embedding_cache.pkl
+
+# reference decks, not part of the project
+ppt/

@@ -1,12 +1,15 @@
 """
 api.py
-Flask REST API — web backend for the Presence AI frontend, wrapping the existing
-dlib `face_recognition` (128-d) pipeline.
+Flask REST API — web backend for the PresenceAI frontend.
 
-It reuses the *same* artifacts the CLI scripts produce:
-    models/classifier.pkl        (SVM/KNN pipeline from train_classifier.py)
-    models/label_encoder.pkl
-    processed_dataset/<name>/     (training images — Register/Update write here)
+Pipeline:  RetinaFace (detect every face) -> ArcFace (512-d embedding) ->
+           nearest-centroid match -> four gates -> temporal vote -> attendance CSV.
+
+Artifacts it reads:
+    models/arcface_centroids.pkl      one 512-d signature per enrolled student
+    models/arcface_label_encoder.pkl  the list of enrolled names
+    models/arcface_thresholds.json    cosine + margin, calibrated on impostors
+    processed_dataset/<name>/         enrolment images (Register/Update write here)
     logs/attendance_YYYY-MM-DD.csv
     data/users.json              (web app accounts — created on first signup)
 
@@ -52,14 +55,6 @@ import numpy as np
 import joblib
 import liveness
 from PIL import Image
-
-# The legacy dlib pipeline is a fallback that the deployed ArcFace path never uses. dlib
-# compiles from source and is slow to install, so it must not be a hard requirement — a
-# fresh clone should start without it.
-try:
-    import face_recognition
-except ImportError:              # noqa: BLE001
-    face_recognition = None
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -68,9 +63,6 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 # ── Config (mirrors scripts/attendance.py) ────────────────────────────────────
 MODELS_DIR           = "models"
-CLASSIFIER_FILE      = os.path.join(MODELS_DIR, "classifier.pkl")          # dlib (legacy)
-LABEL_ENC_FILE       = os.path.join(MODELS_DIR, "label_encoder.pkl")
-ARCFACE_CLF_FILE     = os.path.join(MODELS_DIR, "arcface_classifier.pkl")  # ArcFace (primary)
 ARCFACE_LE_FILE      = os.path.join(MODELS_DIR, "arcface_label_encoder.pkl")
 ARCFACE_CENTROIDS    = os.path.join(MODELS_DIR, "arcface_centroids.pkl")
 ARCFACE_THRESHOLDS   = os.path.join(MODELS_DIR, "arcface_thresholds.json")
@@ -136,40 +128,31 @@ _log_lock = threading.Lock()
 _users_lock = threading.Lock()
 _serializer = URLSafeTimedSerializer(SECRET_KEY, salt="auth-token")
 
-# ── Load classifiers at startup ───────────────────────────────────────────────
-# Primary engine: ArcFace (buffalo_l) + linear SVM. Falls back to the legacy
-# dlib pipeline only if the ArcFace model hasn't been trained yet.
-arcface_clf = arcface_le = arcface_centroids = None
+# ── Load the model at startup ─────────────────────────────────────────────────
+# There is no classifier. ArcFace has already organised the embedding space, so
+# identifying a face is "which stored centroid is nearest, and is it near enough?" —
+# a matrix multiply. That is also why enrolling a student is an append rather than a
+# retrain, and why the system is able to answer "nobody", which a softmax cannot.
+arcface_le = arcface_centroids = None
 arcface_thresholds = {"cos_threshold": ARCFACE_COS_THRESHOLD,
                       "margin": ARCFACE_MARGIN, "calibrated": False}
 try:
-    arcface_clf = joblib.load(ARCFACE_CLF_FILE)
     arcface_le = joblib.load(ARCFACE_LE_FILE)
     arcface_centroids = joblib.load(ARCFACE_CENTROIDS)
-    print(f"✅ ArcFace classifier loaded ({len(arcface_le.classes_)} identities)")
+    print(f"✅ Model loaded — {len(arcface_le.classes_)} enrolled students")
     try:
         import json as _json
         with open(ARCFACE_THRESHOLDS) as f:
             arcface_thresholds = _json.load(f)
-        print(f"   thresholds: cos≥{arcface_thresholds['cos_threshold']} "
+        print(f"   gates: cos≥{arcface_thresholds['cos_threshold']} "
               f"margin≥{arcface_thresholds['margin']} "
               f"({'calibrated' if arcface_thresholds.get('calibrated') else 'defaults'})")
     except Exception:             # noqa: BLE001 — pre-calibration models keep the defaults
-        print("   thresholds: using defaults (retrain to calibrate)")
+        print("   gates: using defaults (retrain to calibrate)")
 except Exception as e:            # noqa: BLE001
-    print(f"ℹ️  ArcFace model not found yet ({e}). Train: python scripts/train_arcface.py")
+    print(f"ℹ️  No model yet ({e}). Register a student, or run scripts/evaluate.py")
 
-if face_recognition is not None:
-    try:
-        pipeline = joblib.load(CLASSIFIER_FILE)
-        label_encoder = joblib.load(LABEL_ENC_FILE)
-        print("✅ Legacy dlib classifier loaded (fallback)")
-    except Exception:             # noqa: BLE001
-        pipeline, label_encoder = None, None
-else:
-    pipeline, label_encoder = None, None
-
-USE_ARCFACE = arcface_clf is not None
+MODEL_READY = arcface_centroids is not None
 _engine = None                    # lazily-initialised ArcFace engine
 
 
@@ -196,7 +179,7 @@ def _set_train_state(**kw):
 
 
 def _training_worker():
-    global arcface_clf, arcface_le, arcface_centroids, arcface_thresholds, USE_ARCFACE
+    global arcface_le, arcface_centroids, arcface_thresholds, MODEL_READY
 
     while True:
         _set_train_state(status="training", message="Starting…", pending=False,
@@ -208,12 +191,12 @@ def _training_worker():
                 dataset=DATASET_DIR,
                 progress=lambda m: _set_train_state(message=m),
             )
-            clf, le, centroids, thresholds = summary.pop("_model")
+            le, centroids, thresholds = summary.pop("_model")
 
             # hot-swap: /predict reads these globals on the next request
-            arcface_clf, arcface_le, arcface_centroids = clf, le, centroids
+            arcface_le, arcface_centroids = le, centroids
             arcface_thresholds = thresholds
-            USE_ARCFACE = True
+            MODEL_READY = True
 
             msg = (f"{summary['identities']} identities "
                    f"({summary['newly_embedded']} new images embedded, "
@@ -250,7 +233,7 @@ def trigger_retrain():
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def decode_base64_image(img_b64):
-    """Data-URL or bare base64 → RGB numpy array (what face_recognition wants)."""
+    """Data-URL or bare base64 → RGB numpy array."""
     _, encoded = img_b64.split(",", 1) if "," in img_b64 else (None, img_b64)
     pil = Image.open(io.BytesIO(base64.b64decode(encoded))).convert("RGB")
     return np.array(pil)
@@ -443,8 +426,8 @@ def me():
 @app.route("/predict", methods=["POST"])
 @require_auth
 def predict():
-    if not USE_ARCFACE and pipeline is None:
-        return jsonify({"error": "No classifier trained. Run python scripts/train_arcface.py"}), 500
+    if not MODEL_READY:
+        return jsonify({"error": "No students enrolled yet. Register one first."}), 500
 
     data = request.get_json(silent=True) or {}
     img_b64 = data.get("image")
@@ -453,11 +436,7 @@ def predict():
 
     rgb = decode_base64_image(img_b64)
 
-    if USE_ARCFACE:
-        results = _predict_arcface(rgb)
-    else:
-        results = _predict_dlib(rgb)
-    return jsonify({"results": results})
+    return jsonify({"results": _predict_arcface(rgb)})
 
 
 def _predict_arcface(rgb):
@@ -551,28 +530,6 @@ def _predict_arcface(rgb):
     return results
 
 
-def _predict_dlib(rgb):
-    """Legacy fallback: face_recognition 128-d + SVM."""
-    results = []
-    face_locations = face_recognition.face_locations(rgb, model=RECOGNITION_MODEL)
-    for (top, right, bottom, left), enc in zip(
-            face_locations, face_recognition.face_encodings(rgb, face_locations)):
-        proba = pipeline.predict_proba(enc.reshape(1, -1))[0]
-        best_idx = int(np.argmax(proba))
-        confidence = float(proba[best_idx])
-        is_known = confidence >= CONFIDENCE_THRESHOLD
-        if is_known:
-            name = str(label_encoder.inverse_transform([best_idx])[0])
-            log_attendance(name, confidence)
-        else:
-            name = "Unknown"
-        results.append({
-            "name": name, "confidence": confidence, "isKnown": is_known,
-            "box": [left, top, right, bottom],
-        })
-    return results
-
-
 # ── Students ──────────────────────────────────────────────────────────────────
 @app.route("/register", methods=["POST"])
 @app.route("/register-student", methods=["POST"])   # backwards-compatible alias
@@ -647,7 +604,7 @@ def get_students():
 @require_auth
 def valid_student_names():
     """Names the active model can actually recognize (are in the classifier)."""
-    le = arcface_le if USE_ARCFACE else label_encoder
+    le = arcface_le
     names = list(map(str, le.classes_)) if le is not None else []
     return jsonify({"valid_names": names})
 
@@ -722,7 +679,7 @@ def stats():
                     f.lower().endswith((".jpg", ".jpeg", ".png")) for f in os.listdir(p)):
                 students += 1
 
-    le = arcface_le if USE_ARCFACE else label_encoder
+    le = arcface_le
     trained = len(le.classes_) if le is not None else 0
 
     records = load_attendance_records()
@@ -743,7 +700,7 @@ def stats():
         accuracy = None
 
     return jsonify({
-        "engine": "arcface" if USE_ARCFACE else ("dlib" if pipeline else "none"),
+        "engine": "arcface",
         "students_registered": students,
         "identities_trained": trained,
         "total_records": len(records),
@@ -768,8 +725,8 @@ def clear_attendance():
 def health():
     return jsonify({
         "status": "ok",
-        "model_loaded": USE_ARCFACE or pipeline is not None,
-        "engine": "arcface" if USE_ARCFACE else ("dlib" if pipeline else "none"),
+        "model_loaded": MODEL_READY,
+        "engine": "arcface",
     })
 
 

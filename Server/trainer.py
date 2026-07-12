@@ -20,14 +20,12 @@ import zlib
 import numpy as np
 import cv2
 import joblib
-from sklearn.svm import SVC
 from sklearn.preprocessing import LabelEncoder
 
 from arcface_engine import ArcFaceEngine
 
 DATASET_DIR   = "processed_dataset"
 MODELS_DIR    = "models"
-CLF_OUT       = os.path.join(MODELS_DIR, "arcface_classifier.pkl")
 LE_OUT        = os.path.join(MODELS_DIR, "arcface_label_encoder.pkl")
 CENTROIDS_OUT = os.path.join(MODELS_DIR, "arcface_centroids.pkl")
 CACHE_OUT     = os.path.join(MODELS_DIR, "arcface_embedding_cache.pkl")
@@ -222,7 +220,19 @@ def calibrate(centroids, X_imp, X_gen, y_gen):
 
 
 def fit_and_save(X, y, X_imp=None):
-    """Fit the linear SVM + per-identity centroids, calibrate, and write the artifacts."""
+    """
+    Build one centroid per student, calibrate the gates, write the artifacts.
+
+    There is no classifier. ArcFace was trained to push different people apart and pull
+    the same person together, so the embedding space is ALREADY separated — identifying a
+    face is "which centroid is nearest?", a matrix multiply, not a learned boundary.
+
+    Dropping the SVM is not just simpler, it is required by the design:
+      * a softmax MUST name one of its classes; it cannot answer "nobody", which is the
+        whole point of an open-set attendance system
+      * we need the RUNNER-UP score for the margin gate, and an SVM only returns its winner
+      * a new student becomes one more row, not a retrain — which is why enrolment is 1.4s
+    """
     classes = np.unique(y)
     if len(classes) < 2:
         raise ValueError(f"need ≥2 enrolled students to train, got {len(classes)}")
@@ -236,22 +246,15 @@ def fit_and_save(X, y, X_imp=None):
         v = X[y == name].mean(axis=0)
         centroids[name] = (v / np.linalg.norm(v)).astype(np.float32)
 
-    # No probability=True: it fits Platt scaling via internal 5-fold CV (very slow at
-    # ~100 classes), and nothing reads predict_proba — /predict takes the label from
-    # .predict() and its confidence from cosine-to-centroid instead.
-    clf = SVC(kernel="linear", C=1.0)
-    clf.fit(X, y_enc)
-
     thresholds = calibrate(centroids, X_imp if X_imp is not None else np.empty((0, X.shape[1])), X, y)
 
     os.makedirs(MODELS_DIR, exist_ok=True)
-    joblib.dump(clf, CLF_OUT)
     joblib.dump(le, LE_OUT)
     joblib.dump(centroids, CENTROIDS_OUT)
     with open(THRESH_OUT, "w") as f:
         json.dump(thresholds, f, indent=2)
 
-    return clf, le, centroids, thresholds
+    return le, centroids, thresholds
 
 
 def retrain(dataset=DATASET_DIR, students_only=True, progress=None):
@@ -282,9 +285,9 @@ def retrain(dataset=DATASET_DIR, students_only=True, progress=None):
         X_imp = np.empty((0, X.shape[1]), dtype=np.float32)
 
     if progress:
-        progress(f"Fitting SVM on {len(X_gen)} embeddings / "
-                 f"{len(np.unique(y_gen))} identities ({len(X_imp)} impostors held out)…")
-    clf, le, centroids, thresholds = fit_and_save(X_gen, y_gen, X_imp)
+        progress(f"Building centroids from {len(X_gen)} embeddings / "
+                 f"{len(np.unique(y_gen))} students ({len(X_imp)} impostors held out)…")
+    le, centroids, thresholds = fit_and_save(X_gen, y_gen, X_imp)
 
     return {
         "identities": int(len(le.classes_)),
@@ -296,5 +299,5 @@ def retrain(dataset=DATASET_DIR, students_only=True, progress=None):
         "newly_embedded": info["embedded"],
         "from_cache": info["from_cache"],
         "skipped": info["skipped"],
-        "_model": (clf, le, centroids, thresholds),
+        "_model": (le, centroids, thresholds),
     }
