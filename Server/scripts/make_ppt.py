@@ -52,6 +52,50 @@ F_GREY = RGBColor(0xF4, 0xF6, 0xF9)
 M_BLUE, M_RED, M_GREEN, M_GREY, M_AMBER = "#1f77c2", "#c0392b", "#1e8e5a", "#5b6676", "#e08e0b"
 
 
+def score_distributions(seed=7, n_students=30):
+    """
+    Recompute the genuine vs impostor score distributions on the SAME split
+    scripts/evaluate.py uses, so the histogram and ROC on the slides are the
+    distributions the reported FAR/threshold actually came from.
+    """
+    import numpy as np
+    import trainer
+
+    X, y, _ = trainer.embed_dataset(progress=None)
+    pool = np.array([trainer.is_impostor(n) for n in y])
+    X, y = X[pool], y[pool]
+    idents = np.unique(y)
+
+    rng = np.random.default_rng(seed)
+    shuffled = rng.permutation(idents)
+    students = np.array(sorted(shuffled[:n_students]))
+    strangers = np.array(sorted(shuffled[n_students:]))
+    half = len(strangers) // 2
+    calib_ids, test_ids = strangers[:half], strangers[half:]
+
+    enrol_X, enrol_y, probe_X = [], [], []
+    for st in students:
+        E = X[y == st]
+        idx = rng.permutation(len(E))
+        cut = int(0.7 * len(E))
+        enrol_X.append(E[idx[:cut]]); enrol_y += [st] * cut
+        probe_X.append(E[idx[cut:]])
+    enrol_X = np.vstack(enrol_X); enrol_y = np.array(enrol_y)
+    probe_X = np.vstack(probe_X)
+
+    cent = {}
+    for n in np.unique(enrol_y):
+        v = enrol_X[enrol_y == n].mean(axis=0)
+        cent[n] = (v / np.linalg.norm(v)).astype(np.float32)
+    M = np.stack([cent[n] for n in sorted(cent)])
+
+    gen = (probe_X @ M.T).max(axis=1)                       # genuine top-1
+    imp = (X[np.isin(y, test_ids)] @ M.T).max(axis=1)       # impostor top-1
+    calib = (X[np.isin(y, calib_ids)] @ M.T).max(axis=1)
+    thr = float(np.quantile(calib, 1 - trainer.TARGET_FAR))
+    return gen, imp, thr
+
+
 # ════════════════════════════════════════════════════════════════ FIGURES ══
 def _box(ax, x, y, w, h, text, fc, ec, fs=8, bold=False):
     ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.02,rounding_size=0.06",
@@ -186,40 +230,6 @@ def figures(ev, bm):
             fontsize=7.5, color=M_RED, va="center", fontweight="bold")
     fig.tight_layout(); fig.savefig(f"{FIG}/methodology_gates.png"); plt.close(fig)
 
-    # 7 · sequence diagram
-    fig, ax = plt.subplots(figsize=(11.5, 4.5)); ax.axis("off")
-    ax.set_xlim(0, 11.5); ax.set_ylim(0, 4.5)
-    actors = ["Student\n(browser)", "React\nfrontend", "Flask API\n/predict", "ArcFace\nengine",
-              "Liveness\nmodule", "Attendance\nCSV"]
-    xs = [0.9, 2.8, 4.8, 6.8, 8.8, 10.7]
-    for x, a in zip(xs, actors):
-        _box(ax, x - 0.72, 3.92, 1.44, 0.5, a, "#e9f2fc", M_BLUE, 7.5, True)
-        ax.plot([x, x], [0.3, 3.92], color="#c8d2de", lw=1, ls="--", zorder=0)
-
-    seq = [
-        (0, 1, 3.6, "webcam frame (every 0.7 s)"),
-        (1, 2, 3.27, "POST /predict {image} + Bearer token"),
-        (2, 3, 2.94, "detect + embed ALL faces"),
-        (3, 2, 2.61, "boxes · 512-d vectors · landmarks"),
-        (2, 2, 2.28, "gates 1–3: size · threshold · margin"),
-        (2, 4, 1.95, "gate 4: is this face actually moving?"),
-        (4, 2, 1.62, "live / not live   (photo → rejected)"),
-        (2, 2, 1.29, "temporal vote — do 3 frames agree?"),
-        (2, 5, 0.90, "append row (once per student per day)"),
-        (2, 1, 0.52, "results[] → boxes + verdicts on screen"),
-    ]
-    for a, b, y, label in seq:
-        if a == b:
-            ax.plot([xs[a], xs[a] + 0.4, xs[a] + 0.4, xs[a]],
-                    [y + 0.07, y + 0.07, y - 0.07, y - 0.07], color=M_AMBER, lw=1.2)
-            ax.text(xs[a] + 0.5, y, label, fontsize=7, va="center",
-                    color=M_AMBER, fontweight="bold")
-        else:
-            col = M_GREEN if b == 5 else (M_RED if 4 in (a, b) else M_GREY)
-            _arrow(ax, xs[a], y, xs[b], y, color=col)
-            ax.text((xs[a] + xs[b]) / 2, y + 0.09, label, fontsize=7, ha="center", color=col)
-    fig.tight_layout(); fig.savefig(f"{FIG}/sequence.png"); plt.close(fig)
-
     # 8 · experimental protocol
     fig, ax = plt.subplots(figsize=(10.5, 3.4)); ax.axis("off")
     ax.set_xlim(0, 10.5); ax.set_ylim(0, 3.4)
@@ -239,7 +249,114 @@ def figures(ev, bm):
                         "against is not a measurement.",
             fontsize=7.5, ha="center", color=M_RED, style="italic")
     fig.tight_layout(); fig.savefig(f"{FIG}/protocol.png"); plt.close(fig)
-    print("  8 figures generated")
+
+    # 9 · SYSTEM ARCHITECTURE (replaces the sequence diagram)
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(11.5, 3.6)); ax.axis("off")
+    ax.set_xlim(0, 11.5); ax.set_ylim(0, 3.6)
+
+    _box(ax, 0.15, 2.55, 1.55, 0.85, "React UI\n(Vite + Tailwind)", "#e9f2fc", M_BLUE)
+    _box(ax, 0.15, 1.45, 1.55, 0.85, "Webcam\n1 frame / 0.7 s", "#e9f2fc", M_BLUE)
+    _box(ax, 0.15, 0.35, 1.55, 0.85, "Box + verdict\noverlay", "#e9f2fc", M_BLUE)
+    ax.text(0.92, 3.48, "CLIENT", fontsize=8.5, fontweight="bold", color=M_BLUE, ha="center")
+
+    _box(ax, 2.3, 1.45, 1.9, 1.95,
+         "Flask REST API\n\n/predict\n/register\n/train/status\n\nBearer-token auth",
+         "#f4f6f9", M_GREY, 8, True)
+    _box(ax, 2.3, 0.35, 1.9, 0.85, "Auto-retrain\nworker (thread)", "#f4f6f9", M_GREY)
+    ax.text(3.25, 3.48, "BACKEND", fontsize=8.5, fontweight="bold", color=M_GREY, ha="center")
+
+    _box(ax, 4.8, 2.55, 2.2, 0.85, "RetinaFace\ndetect ALL faces", "#fdecea", M_RED)
+    _box(ax, 4.8, 1.45, 2.2, 0.85, "ArcFace R50\n512-d embedding", "#fdecea", M_RED)
+    _box(ax, 4.8, 0.35, 2.2, 0.85, "Liveness module\nlandmark motion", "#fdecea", M_RED, 8, True)
+    ax.text(5.9, 3.48, "INFERENCE ENGINE  (ONNX Runtime, CPU)", fontsize=8.5,
+            fontweight="bold", color=M_RED, ha="center")
+
+    _box(ax, 7.6, 2.55, 1.9, 0.85, "Centroids\n1 per student", "#fef5e3", M_AMBER)
+    _box(ax, 7.6, 1.45, 1.9, 0.85, "Thresholds\n(calibrated)", "#fef5e3", M_AMBER)
+    _box(ax, 7.6, 0.35, 1.9, 0.85, "Embedding cache\n(fast retrain)", "#fef5e3", M_AMBER)
+    ax.text(8.55, 3.48, "MODEL STORE", fontsize=8.5, fontweight="bold", color=M_AMBER, ha="center")
+
+    _box(ax, 10.0, 2.55, 1.35, 0.85, "users.json", "#e8f7ef", M_GREEN)
+    _box(ax, 10.0, 1.45, 1.35, 0.85, "attendance\n.csv", "#e8f7ef", M_GREEN, 8, True)
+    ax.text(10.67, 3.48, "STORAGE", fontsize=8.5, fontweight="bold", color=M_GREEN, ha="center")
+
+    for a, b in [(1.7, 2.3), (4.2, 4.8), (7.0, 7.6), (9.5, 10.0)]:
+        _arrow(ax, a, 1.9, b, 1.9)
+    _arrow(ax, 2.3, 1.2, 1.7, 0.78)
+    ax.text(5.75, 0.02, "Everything runs on one laptop. No GPU, no cloud, no database server — "
+                        "student faces never leave the machine.",
+            fontsize=8, ha="center", color=M_GREY, style="italic")
+    fig.tight_layout(); fig.savefig(f"{FIG}/architecture.png"); plt.close(fig)
+
+    # 10 · WHY RECOGNITION ALONE FAILS — the attack, drawn
+    fig, ax = plt.subplots(figsize=(9.0, 2.5)); ax.axis("off")
+    ax.set_xlim(0, 9.0); ax.set_ylim(0, 2.5)
+    _box(ax, 0.1, 1.35, 1.6, 0.8, "REAL person\nat the camera", "#e8f7ef", M_GREEN)
+    _box(ax, 0.1, 0.25, 1.6, 0.8, "PHOTO of them,\nheld up", "#fdecea", M_RED)
+    _box(ax, 2.3, 0.8, 1.8, 0.9, "ArcFace\nembedding", "#f4f6f9", M_GREY, 8, True)
+    _arrow(ax, 1.7, 1.75, 2.3, 1.45, color=M_GREEN)
+    _arrow(ax, 1.7, 0.65, 2.3, 1.05, color=M_RED)
+    _box(ax, 4.7, 0.8, 2.0, 0.9, "Nearly IDENTICAL\n512-d vectors", "#fef5e3", M_AMBER, 8, True)
+    _arrow(ax, 4.1, 1.25, 4.7, 1.25)
+    _box(ax, 7.3, 1.35, 1.6, 0.8, "Marked PRESENT", "#e8f7ef", M_GREEN)
+    _box(ax, 7.3, 0.25, 1.6, 0.8, "Marked PRESENT", "#fdecea", M_RED, 8, True)
+    _arrow(ax, 6.7, 1.45, 7.3, 1.75, color=M_GREEN)
+    _arrow(ax, 6.7, 1.05, 7.3, 0.65, color=M_RED)
+    ax.text(4.5, 2.32, "Face recognition is DESIGNED to do this — it is what makes it a good model.",
+            fontsize=9, ha="center", color=M_RED, fontweight="bold")
+    ax.text(4.5, 0.02, "Which is precisely why recognition ALONE cannot prevent proxy attendance.",
+            fontsize=8.5, ha="center", color=M_GREY, style="italic")
+    fig.tight_layout(); fig.savefig(f"{FIG}/attack.png"); plt.close(fig)
+
+    # 11 · genuine vs impostor score distributions
+    gen, imp, thr = score_distributions()
+    fig, ax = plt.subplots(figsize=(5.4, 2.9))
+    ax.hist(imp, bins=45, color=M_RED, alpha=0.72, density=True,
+            label=f"Strangers (n={len(imp)})")
+    ax.hist(gen, bins=25, color=M_GREEN, alpha=0.72, density=True,
+            label=f"Genuine students (n={len(gen)})")
+    ax.axvline(thr, color=M_AMBER, ls="--", lw=2)
+    ax.text(thr + 0.015, ax.get_ylim()[1] * 0.78, f"threshold\n{thr:.3f}",
+            color=M_AMBER, fontsize=8, fontweight="bold")
+    ax.set_xlabel("Cosine similarity to the closest student")
+    ax.set_ylabel("Density")
+    ax.set_title("The two populations barely overlap", fontsize=10.5, fontweight="bold")
+    ax.legend(fontsize=8, frameon=False)
+    fig.tight_layout(); fig.savefig(f"{FIG}/scores.png"); plt.close(fig)
+
+    # 12 · open-set ROC
+    sc = np.concatenate([gen, imp])
+    lab = np.concatenate([np.ones(len(gen)), np.zeros(len(imp))])
+    order = np.argsort(-sc)
+    tpr = np.cumsum(lab[order]) / lab.sum()
+    fpr = np.cumsum(1 - lab[order]) / (len(lab) - lab.sum())
+    auc = float(np.trapezoid(tpr, fpr)) if hasattr(np, "trapezoid") else float(np.trapz(tpr, fpr))
+    eer_i = int(np.argmin(np.abs((1 - tpr) - fpr)))
+    fig, ax = plt.subplots(figsize=(4.4, 2.9))
+    ax.plot(fpr * 100, tpr * 100, color=M_BLUE, lw=2.2, label=f"AUC = {auc:.4f}")
+    ax.plot([0, 100], [0, 100], "--", color="#c8d2de", lw=1)
+    ax.plot(fpr[eer_i] * 100, tpr[eer_i] * 100, "o", color=M_RED, ms=7,
+            label=f"EER = {fpr[eer_i] * 100:.2f}%")
+    ax.set_xlabel("False accept rate (%)"); ax.set_ylabel("True accept rate (%)")
+    ax.set_title("Open-set ROC", fontsize=10.5, fontweight="bold")
+    ax.legend(fontsize=8, frameon=False, loc="lower right")
+    fig.tight_layout(); fig.savefig(f"{FIG}/roc.png"); plt.close(fig)
+
+    # 13 · running cost
+    fig, ax = plt.subplots(figsize=(4.6, 2.7))
+    ax.barh(["PresenceAI\n(offline)", "Cloud face API\n(continuous)"], [0, 150000],
+            color=[M_GREEN, M_RED], height=0.5)
+    ax.set_xlabel("Recurring cost per school, per year  (INR)")
+    ax.text(3000, 0, "= 0", va="center", fontsize=11, fontweight="bold", color=M_GREEN)
+    ax.text(146000, 1, "1,50,000  ", va="center", ha="right", fontsize=10,
+            fontweight="bold", color="white")
+    ax.set_title("...and the cloud uploads every student's face",
+                 fontsize=9.5, fontweight="bold")
+    fig.tight_layout(); fig.savefig(f"{FIG}/cost.png"); plt.close(fig)
+
+    print("  13 figures generated")
+
 
 
 # ═══════════════════════════════════════════════════════ SLIDE PRIMITIVES ══
@@ -396,25 +513,18 @@ def main():
         ("a printed photo was marked present 100% of the time.", True, RED, 0),
     ], 7.05, 1.44, 5.55, 1.75, size=11),
 
-    text(s, [("Four failures a real classroom deployment must survive", True, NAVY, 0)],
-         0.5, 3.5, 12.3, 0.35, size=13)
+    s.shapes.add_picture(f"{FIG}/attack.png", Inches(1.55), Inches(3.35), width=Inches(10.2))
+
     fails = [
-        ("PRESENTATION ATTACK", "A photo or a phone screen held up to\nthe camera is marked present.", F_RED, RED),
+        ("PRESENTATION ATTACK", "A photo or phone screen held to\nthe camera is marked present.", F_RED, RED),
         ("NO WAY TO SAY 'NOBODY'", "A softmax must always name someone.\nA stranger walking past gets a name.", F_AMBER, AMBER),
         ("THE BACK OF THE ROOM", "Too few pixels to identify — but the\nmodel still answers, confidently.", F_AMBER, AMBER),
-        ("AN IRREVERSIBLE WRITE", "Attendance is written once per day. One\nbad frame marks the wrong student all day.", F_BLUE, BLUE),
+        ("AN IRREVERSIBLE WRITE", "Written once per day. One bad frame\nmarks the wrong student all day.", F_BLUE, BLUE),
     ]
     for i, (t, body, fc, ec) in enumerate(fails):
         x = 0.5 + i * 3.14
-        panel(s, x, 3.95, 2.95, 1.55, fc, ec)
-        text(s, [(t, True, ec, 0), (body, False, INK, 0)], x + 0.14, 4.06, 2.7, 1.35, size=9.5)
-
-    panel(s, 0.5, 5.75, 12.3, 0.85, F_GREY, NAVY)
-    text(s, [
-        ("OBJECTIVE", True, NAVY, 0),
-        "Detect and recognise every face in one frame; reject strangers; refuse faces too small to identify; "
-        "block photo attacks; and commit attendance only when several frames agree — on a laptop CPU, fully offline.",
-    ], 0.68, 5.86, 11.9, 0.7, size=11)
+        panel(s, x, 5.8, 2.95, 1.15, fc, ec)
+        text(s, [(t, True, ec, 0), (body, False, INK, 0)], x + 0.14, 5.88, 2.7, 1.0, size=8.5)
 
     # ── 3 · PROPOSED SOLUTION ───────────────────────────────────────────────
     s = slide(prs, "PROPOSED SOLUTION",
@@ -458,80 +568,67 @@ def main():
     ]
     for i, (t, body, fc, ec) in enumerate(items):
         x = 0.5 + i * 3.14
-        panel(s, x, 3.85, 2.95, 2.75, fc, ec)
-        text(s, [(t, True, ec, 0), ("", False, INK, 0), (body, False, INK, 0)],
-             x + 0.14, 3.96, 2.68, 2.55, size=8.5)
+        panel(s, x, 3.6, 2.95, 1.55, fc, ec)
+        text(s, [(t, True, ec, 0), (body, False, INK, 0)],
+             x + 0.14, 3.68, 2.68, 1.42, size=7.5)
 
-    # ── 4 · METHODOLOGY I ───────────────────────────────────────────────────
-    s = slide(prs, "PROPOSED METHODOLOGY — Representation & Enrolment",
-              "The deep model is frozen. 'Learning' a student means storing one vector.")
-    s.shapes.add_picture(f"{FIG}/methodology_enroll.png", Inches(0.5), Inches(1.3),
+    # system architecture — one laptop, no cloud
+    s.shapes.add_picture(f"{FIG}/architecture.png", Inches(0.5), Inches(5.25),
                          width=Inches(12.3))
-    panel(s, 0.5, 5.3, 12.3, 1.45, F_BLUE, BLUE)
-    text(s, [
-        ("Why this matters — closed-set vs open-set recognition", True, NAVY, 0),
-        "Prior work trains an N-class CNN and asks \"WHICH of my N students is this?\" — a softmax must always name "
-        "someone, so a stranger is guaranteed to be misidentified, and every new student means retraining the network.",
-        "We ask \"is this ANY of my students at all?\" The system is allowed to answer 'nobody'. That is the only honest "
-        "answer when a stranger walks past the camera — and it is why enrolment is a table insert, not a training run.",
-    ], 0.7, 5.42, 11.9, 1.25, size=11)
 
-    # ── 5 · METHODOLOGY II ──────────────────────────────────────────────────
-    s = slide(prs, "PROPOSED METHODOLOGY — The Decision Pipeline",
-              "Four gates. Any one of them can refuse — and refusing is the point.")
-    s.shapes.add_picture(f"{FIG}/methodology_gates.png", Inches(0.5), Inches(1.3),
+    # ── 4 · METHODOLOGY (representation + decision, one slide) ──────────────
+    s = slide(prs, "PROPOSED METHODOLOGY",
+              "A · The model is frozen — 'learning' a student means storing one vector.   "
+              "B · Four gates decide who is actually present.")
+    s.shapes.add_picture(f"{FIG}/methodology_enroll.png", Inches(0.5), Inches(1.25),
                          width=Inches(12.3))
-    panel(s, 0.5, 5.95, 12.3, 0.85, F_RED, RED)
+    s.shapes.add_picture(f"{FIG}/methodology_gates.png", Inches(0.5), Inches(4.05),
+                         width=Inches(12.3))
+    panel(s, 0.5, 6.72, 12.3, 0.28, F_RED, RED)
     text(s, [
-        ("The classifier has no 'I don't know' option — it ALWAYS outputs a name.", True, RED, 0),
-        "Every gate above exists because a confident answer from a bad input is worse than no answer at all.",
-    ], 0.7, 6.06, 11.9, 0.68, size=11)
-
-    # ── 6 · SEQUENCE DIAGRAM ────────────────────────────────────────────────
-    s = slide(prs, "SEQUENCE DIAGRAM",
-              "One frame, end to end. Frames arrive 700 ms apart; ~250 ms of work per frame.")
-    s.shapes.add_picture(f"{FIG}/sequence.png", Inches(0.5), Inches(1.3), width=Inches(12.3))
-    panel(s, 0.5, 6.1, 12.3, 0.8, F_GREY, GREY)
-    text(s, [
-        ("Technology stack", True, NAVY, 0),
-        "Frontend: React · Vite · TailwindCSS    |    Backend: Flask REST API with Bearer-token auth    |    "
-        "Engine: InsightFace (RetinaFace + ArcFace) on ONNX Runtime, CPU only    |    Store: CSV + JSON on disk",
-    ], 0.68, 6.2, 11.9, 0.62, size=10.5)
+        ("The classifier has no 'I don't know' option — it ALWAYS outputs a name. "
+         "Every gate exists because a confident answer from a bad input is worse than no answer at all.",
+         True, RED, 0),
+    ], 0.68, 6.73, 11.9, 0.26, size=9)
 
     # ── 7 · EXPERIMENTAL SETUP ──────────────────────────────────────────────
     s = slide(prs, "EXPERIMENTAL SETUP & PROTOCOL",
               "The splits are what make the numbers believable — and they are not optional.")
-    s.shapes.add_picture(f"{FIG}/protocol.png", Inches(1.3), Inches(1.25), height=Inches(3.4))
+    s.shapes.add_picture(f"{FIG}/protocol.png", Inches(0.6), Inches(1.3), height=Inches(2.9))
+    s.shapes.add_picture(f"{FIG}/scores.png", Inches(0.6), Inches(4.35), height=Inches(2.45))
+    s.shapes.add_picture(f"{FIG}/roc.png", Inches(5.35), Inches(4.35), height=Inches(2.45))
 
-    panel(s, 0.5, 4.85, 4.0, 1.9, F_BLUE, BLUE)
+    panel(s, 9.5, 4.35, 3.3, 2.45, F_BLUE, BLUE)
     text(s, [
-        ("Metrics reported", True, NAVY, 0),
-        "Accuracy — correct identity on held-out probes",
-        "FAR — strangers wrongly admitted",
-        "False-log rate — wrong records written",
-        "Attack success — photo marked present",
-        "Latency — per frame, and per enrolment",
-    ], 0.68, 4.97, 3.7, 1.7, size=10)
+        ("What these two charts prove", True, NAVY, 0),
+        "",
+        "The genuine and impostor populations are almost",
+        "completely separated — which is what lets a single",
+        "cosine threshold work at all.",
+        "",
+        "The threshold is placed where only 1% of the",
+        "CALIBRATION strangers get through, then measured",
+        "on strangers it has never seen.",
+        "",
+        ("That is the difference between a measurement", True, RED, 0),
+        ("and a number you tuned until it looked good.", True, RED, 0),
+    ], 9.68, 4.47, 3.0, 2.25, size=8.5)
 
-    panel(s, 4.7, 4.85, 4.0, 1.9, F_GREY, GREY)
-    text(s, [
-        ("Environment", True, NAVY, 0),
-        "MacBook Air · CPU only · no GPU",
-        "Python 3.13 · ONNX Runtime",
-        f"Model memory: {bm['memory_mb']:.0f} MB",
-        "96 VGGFace2 identities · 2,930 embeddings",
-        "2 real users enrolled for the live demo",
-    ], 4.88, 4.97, 3.7, 1.7, size=10)
-
-    panel(s, 8.9, 4.85, 3.9, 1.9, F_RED, RED)
+    panel(s, 9.5, 1.3, 3.3, 2.9, F_RED, RED)
     text(s, [
         ("Why the 2 real users are NOT the experiment", True, RED, 0),
+        "",
         "With N=2, chance alone scores 50%. Any accuracy",
-        "figure from two people is meaningless.",
-        "All quantitative claims come from the 30-identity",
-        "cohort. The live system is a feasibility demo —",
-        "and we say so rather than inflate it.",
-    ], 9.08, 4.97, 3.6, 1.7, size=9.5)
+        "figure taken from two people is meaningless.",
+        "",
+        "Every quantitative claim in this deck comes from",
+        "the 30-identity cohort. The live system with 2 real",
+        "users is a feasibility demonstration — and we say",
+        "so, rather than inflate it.",
+        "",
+        ("Environment", True, NAVY, 0),
+        f"MacBook Air · CPU only · no GPU · {bm['memory_mb']:.0f} MB",
+    ], 9.68, 1.42, 3.0, 2.7, size=8.5)
 
     # ── 8 · RESULTS I ───────────────────────────────────────────────────────
     s = slide(prs, "RESULTS AND ANALYSIS  (1 / 2)  —  Security",
@@ -679,11 +776,14 @@ def main():
         ]),
     ]
     for i, (t, fc, ec, lines) in enumerate(blocks):
-        x = 0.6 + (i % 2) * 6.35
+        x = 0.6 + (i % 2) * 4.25
         y = 1.4 + (i // 2) * 2.6
-        panel(s, x, y, 6.05, 2.35, fc, ec)
+        w = 8.1 if False else 3.95
+        panel(s, x, y, w, 2.35, fc, ec)
         text(s, [(t, True, ec, 0), ("", False, INK, 0)] + lines,
-             x + 0.18, y + 0.13, 5.7, 2.15, size=10.5)
+             x + 0.16, y + 0.13, w - 0.32, 2.15, size=8.5)
+
+    s.shapes.add_picture(f"{FIG}/cost.png", Inches(9.0), Inches(4.15), height=Inches(2.2))
 
     panel(s, 0.6, 6.35, 12.15, 0.6, F_GREY, NAVY)
     text(s, [("Target audience — schools and colleges that cannot afford a GPU or a cloud subscription, "
