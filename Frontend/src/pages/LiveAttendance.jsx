@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Camera, Square, StopCircle, Video, VideoOff } from "lucide-react";
+import { motion } from "framer-motion";
+import { Camera, StopCircle, Video, VideoOff, Play, ScanFace } from "lucide-react";
 import { predictFace } from "../utils/api";
+import { Card, CardTitle, Badge, Button, Empty } from "../components/ui";
 
 export default function LiveAttendance() {
   const videoRef = useRef(null);
@@ -141,8 +143,9 @@ export default function LiveAttendance() {
             top: `${top}px`,
             width: `${width}px`,
             height: `${height}px`,
-            border: `3px solid ${color}`,
-            boxShadow: `0 0 10px ${color}`,
+            border: `2px solid ${color}`,
+            borderRadius: "6px",
+            boxShadow: `0 0 12px ${color}55`,
             pointerEvents: "none",
             zIndex: 10,
           }}
@@ -150,16 +153,15 @@ export default function LiveAttendance() {
           <div
             style={{
               position: "absolute",
-              top: "-30px",
-              left: "0",
-              backgroundColor: "rgba(10,15,36,0.95)",
-              color: "white",
-              padding: "4px 12px",
-              borderRadius: "4px",
-              fontSize: "14px",
-              fontWeight: "600",
+              top: "-24px",
+              left: "-1px",
+              background: color,
+              color: "#04070f",
+              padding: "2px 8px",
+              borderRadius: "5px",
+              fontSize: "11px",
+              fontWeight: 700,
               whiteSpace: "nowrap",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
             }}
           >
             {label}
@@ -169,135 +171,153 @@ export default function LiveAttendance() {
     });
   };
 
+  const known = detectedFaces.filter((f) => f.isKnown).length;
+  const logged = detectedFaces.filter((f) => f.logged).length;
+
   return (
-    <div className="min-h-screen w-full mx-auto max-w-[1400px] px-5 sm:px-8 pt-24 pb-16 relative">
-      <div>
-        {/* Header */}
-        <div className="card-glass p-5 mb-5">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="bg-blue-600 p-3 rounded-lg">
-                <Camera className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="display-lg text-white">
-                  Live Face Attendance
-                </h1>
-                <p className="text-white/60 mt-1">
-                  {isAttendanceActive ? (
-                    <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                      Detecting faces...
-                    </span>
-                  ) : (
-                    "Click Start to begin attendance"
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {/* Control Buttons */}
-            <div className="flex flex-wrap gap-3">
-              {!isAttendanceActive ? (
-                <button
-                  onClick={startAttendance}
-                  disabled={!cameraOn}
-                  className="flex items-center space-x-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors shadow-md hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Square className="w-5 h-5" />
-                  <span>Start Attendance</span>
-                </button>
-              ) : (
-                <button
-                  onClick={stopAttendance}
-                  className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors shadow-md hover:shadow-lg font-medium"
-                >
-                  <StopCircle className="w-5 h-5" />
-                  <span>Stop Attendance</span>
-                </button>
-              )}
-
-              <button
-                onClick={toggleCamera}
-                className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium border transition-colors
-                  ${cameraOn
-                    ? "border-red-400/30 text-red-300 hover:bg-red-500/10"
-                    : "border-emerald-400/30 text-emerald-300 hover:bg-emerald-500/10"}`}
-              >
-                {cameraOn ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
-                <span>{cameraOn ? "Camera Off" : "Camera On"}</span>
-              </button>
+    <div className="min-h-screen w-full mx-auto max-w-6xl px-5 sm:px-8 pt-24 pb-16">
+      {/* header: title + controls on one line — it was a full-height hero before */}
+      <Card pad="p-4" className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-gradient-to-br from-[--brand] to-violet-500">
+              <Camera className="h-5 w-5 text-white" />
+            </span>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight text-white">Live Face Attendance</h1>
+              <p className="mt-0.5 text-xs text-[--muted]">
+                {isAttendanceActive ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                    Scanning every 1.5s — all faces in frame
+                  </span>
+                ) : (
+                  "Start to begin marking attendance"
+                )}
+              </p>
             </div>
           </div>
-        </div>
 
-        {/* Video Feed with Face Detection */}
-        <div className="card-glass p-5">
-          <div className="relative w-full overflow-hidden rounded-lg" style={{ aspectRatio: "16/9" }}>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full bg-gray-900 object-cover"
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            {!isAttendanceActive ? (
+              <Button onClick={startAttendance} disabled={!cameraOn}>
+                <Play className="h-4 w-4" /> Start attendance
+              </Button>
+            ) : (
+              <Button variant="danger" onClick={stopAttendance}>
+                <StopCircle className="h-4 w-4" /> Stop
+              </Button>
+            )}
+            <Button variant="ghost" onClick={toggleCamera}>
+              {cameraOn ? <VideoOff className="h-4 w-4" /> : <Video className="h-4 w-4" />}
+              {cameraOn ? "Camera off" : "Camera on"}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr] lg:items-start">
+        {/* video: capped by aspect ratio, not left to fill the viewport */}
+        <Card pad="p-3">
+          <div className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-black/50"
+               style={{ aspectRatio: "16/9" }}>
+            <video ref={videoRef} autoPlay playsInline muted
+                   className="h-full w-full object-cover" />
             {isAttendanceActive && (
-              <div className="absolute inset-0 pointer-events-none">
-                {drawFaceBoxes()}
-              </div>
+              <div className="pointer-events-none absolute inset-0">{drawFaceBoxes()}</div>
             )}
             {!cameraOn && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3
-                              bg-[#05070f]/90 text-white/50">
-                <VideoOff className="w-14 h-14" />
-                <p className="text-sm">Camera is off — click “Camera On” to resume</p>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-black/70">
+                <VideoOff className="h-8 w-8 text-slate-600" />
+                <p className="text-xs text-slate-500">Camera is off</p>
+              </div>
+            )}
+            {isAttendanceActive && (
+              <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full
+                              bg-black/70 px-2.5 py-1 text-[10px] font-semibold text-rose-300 backdrop-blur">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" /> LIVE
               </div>
             )}
           </div>
           <canvas ref={canvasRef} className="hidden" />
 
-          {/* Legend */}
-          {isAttendanceActive && (
-            <div className="mt-6 flex items-center justify-center space-x-8 pb-4 border-b">
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-green-500 rounded"></div>
-                <span className="text-sm font-medium text-white/70">
-                  Known Person
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-500">
+            {[["#10b981", "Marked present"], ["#f59e0b", "Verifying liveness"], ["#ef4444", "Unknown / not live"]]
+              .map(([c, label]) => (
+                <span key={label} className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-sm" style={{ background: c }} />
+                  {label}
                 </span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-red-500 rounded"></div>
-                <span className="text-sm font-medium text-white/70">
-                  Unknown Person
-                </span>
-              </div>
-            </div>
-          )}
+              ))}
+          </div>
+        </Card>
 
-          {/* Detection Stats */}
-          {isAttendanceActive && detectedFaces.length > 0 && (
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white/5 border border-white/10 rounded-lg p-4 text-center">
-                <p className="text-3xl font-bold text-blue-400">
-                  {detectedFaces.length}
-                </p>
-                <p className="text-sm text-white/60 mt-1">Total Faces Detected</p>
+        {/* the live verdicts — this is what the operator actually watches */}
+        <Card pad="p-4">
+          <CardTitle right={
+            detectedFaces.length > 0 && <Badge tone="muted">{detectedFaces.length} in frame</Badge>
+          }>
+            Live detections
+          </CardTitle>
+
+          {!isAttendanceActive ? (
+            <Empty icon={ScanFace} title="Not scanning"
+                   sub="Press Start — every face in the frame is detected and checked for liveness." />
+          ) : detectedFaces.length === 0 ? (
+            <Empty icon={ScanFace} title="No faces in frame"
+                   sub="Step into view. Faces under 40px wide are refused rather than guessed at." />
+          ) : (
+            <>
+              <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
+                {detectedFaces.map((f, i) => {
+                  const tone = !f.isKnown ? "bad" : f.logged ? "good" : "warn";
+                  const status = !f.isKnown
+                    ? f.name
+                    : f.logged
+                      ? "Marked present"
+                      : f.reason === "spoof_suspected"
+                        ? "Not live — photo?"
+                        : "Verifying liveness…";
+                  return (
+                    <motion.div key={i}
+                      initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg
+                                         bg-gradient-to-br from-[--brand]/30 to-violet-500/25 text-xs font-bold">
+                          {(f.name || "?").charAt(0).toUpperCase()}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-white">{f.name}</div>
+                          <div className="truncate text-[10px] text-slate-500">{status}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono text-xs tabular-nums text-slate-300">
+                          {Math.round((f.confidence || 0) * 100)}%
+                        </div>
+                        <Badge tone={tone} className="mt-1">
+                          {f.logged ? "present" : f.isKnown ? "pending" : "rejected"}
+                        </Badge>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
-              <div className="bg-green-500/10 border border-green-400/20 rounded-lg p-4 text-center">
-                <p className="text-3xl font-bold text-green-600">
-                  {detectedFaces.filter((f) => f.isKnown).length}
-                </p>
-                <p className="text-sm text-white/60 mt-1">Known Persons</p>
+
+              <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/10 pt-3.5 text-center">
+                {[["In frame", detectedFaces.length, "text-slate-200"],
+                  ["Identified", known, "text-sky-300"],
+                  ["Marked", logged, "text-emerald-300"]].map(([k, v, c]) => (
+                  <div key={k}>
+                    <div className={`text-base font-bold tabular-nums ${c}`}>{v}</div>
+                    <div className="text-[10px] uppercase tracking-wide text-slate-600">{k}</div>
+                  </div>
+                ))}
               </div>
-              <div className="bg-red-500/10 border border-red-400/20 rounded-lg p-4 text-center">
-                <p className="text-3xl font-bold text-red-600">
-                  {detectedFaces.filter((f) => !f.isKnown).length}
-                </p>
-                <p className="text-sm text-white/60 mt-1">Unknown Persons</p>
-              </div>
-            </div>
+            </>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

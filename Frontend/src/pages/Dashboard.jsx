@@ -236,7 +236,7 @@ export default function Dashboard() {
         {/* LINE CHART */}
         <div className="card-glass p-5">
           <h2 className="text-white text-xl mb-4 flex items-center justify-between">
-            <span>📊 Attendance Trend</span>
+            <span>Attendance Trend</span>
             <span className="text-sm bg-blue-600/30 px-3 py-1 rounded-full text-blue-300">
               {attendanceData.length} days
             </span>

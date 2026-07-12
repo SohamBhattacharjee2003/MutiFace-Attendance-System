@@ -87,27 +87,25 @@ export default function AttendanceRecords() {
   });
 
   return (
-    <div className="min-h-screen w-full mx-auto max-w-[1400px] px-5 sm:px-8 pt-24 pb-16 relative">
+    <div className="min-h-screen w-full mx-auto max-w-6xl px-5 sm:px-8 pt-24 pb-16 relative">
 
       {/* Background Glow */}
-      <div className="absolute w-[650px] h-[650px] bg-blue-900/20 blur-[200px] -top-20 left-20 rounded-full"></div>
-      <div className="absolute w-[450px] h-[450px] bg-cyan-600/20 blur-[200px] bottom-10 right-10 rounded-full"></div>
 
       {/* Title */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-10 gap-4">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-5 gap-4">
         <div>
           <motion.h1
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-white text-2xl sm:text-3xl font-bold flex items-center gap-4"
+            className="display-lg text-white flex items-center gap-3"
           >
             Attendance <span className="text-blue-400">Records</span>
-            <span className="text-base bg-blue-600/30 px-4 py-2 rounded-full text-blue-300 font-semibold">
+            <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-medium text-sky-300">
               {records.length} Total
             </span>
           </motion.h1>
           {lastUpdate && (
-            <p className="text-gray-400 text-sm mt-2">
+            <p className="mt-1.5 text-xs text-[--muted]">
               Last updated: {lastUpdate.toLocaleTimeString()} • Auto-refreshing every 5s
             </p>
           )}
@@ -115,7 +113,7 @@ export default function AttendanceRecords() {
         
         <button
           onClick={() => fetchRecords(validStudentNames)}
-          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition shadow-lg flex items-center gap-2"
+          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[--brand] to-indigo-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 transition hover:brightness-110"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -125,7 +123,7 @@ export default function AttendanceRecords() {
       </div>
 
       {/* Top Controls */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="mb-4 flex flex-wrap items-center gap-2.5">
 
         {/* Search */}
         <input
@@ -157,12 +155,12 @@ export default function AttendanceRecords() {
       </div>
 
       {/* Table Container */}
-      <div className="bg-white/10 border border-white/20 rounded-2xl backdrop-blur-xl p-6 shadow-xl overflow-auto max-h-[70vh]">
+      <div className="card-glass scroll-x max-h-[65vh] overflow-y-auto p-0">
 
-        <table className="w-full text-left text-white">
+        <table className="w-full min-w-[640px] text-left text-sm text-white">
           <thead>
-            <tr className="border-b border-white/20 text-blue-300">
-              <th className="py-3">Avatar</th>
+            <tr className="sticky top-0 z-10 border-b border-white/10 bg-[--bg-1]/95 backdrop-blur text-[11px] uppercase tracking-wide text-slate-400">
+              <th className="px-4 py-3 font-medium">Avatar</th>
               <th>Name</th>
               <th>Confidence</th>
               <th>Time</th>
@@ -173,10 +171,10 @@ export default function AttendanceRecords() {
           <tbody>
             {filteredRecords.length === 0 ? (
               <tr>
-                <td colSpan="5" className="py-12 text-center">
-                  <div className="text-gray-400">
-                    <div className="text-5xl mb-4">📋</div>
-                    <p className="text-xl font-semibold mb-2">No Attendance Records Found</p>
+                <td colSpan="5" className="px-4 py-14 text-center">
+                  <div className="text-slate-500">
+                    
+                    <p className="text-sm font-medium text-slate-300">No attendance records yet</p>
                     <p className="text-sm">
                       {records.length === 0 
                         ? "Start taking attendance to see records here" 
@@ -197,31 +195,31 @@ export default function AttendanceRecords() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.03 }}
-                    className="border-b border-white/10 hover:bg-white/5"
+                    className="border-b border-white/[0.06] transition hover:bg-white/[0.03]"
                   >
                     {/* Avatar */}
-                    <td className="py-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-cyan-400 rounded-full flex items-center justify-center font-bold text-white">
+                    <td className="px-4 py-2.5">
+                      <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-[--brand]/40 to-violet-500/30 text-xs font-bold text-white">
                         {initials}
                       </div>
                     </td>
 
                     {/* Name */}
-                    <td className="font-semibold">{rec.name || "Unknown"}</td>
+                    <td className="px-4 py-2.5 font-medium">{rec.name || "Unknown"}</td>
 
                     {/* Confidence */}
-                    <td className="text-blue-300">
+                    <td className="px-4 py-2.5 font-mono text-xs tabular-nums text-sky-300">
                       {rec.confidence ? `${(rec.confidence * 100).toFixed(0)}%` : "N/A"}
                     </td>
 
                     {/* Time */}
-                    <td className="text-gray-300">
+                    <td className="px-4 py-2.5 text-xs tabular-nums text-slate-400">
                       {rec.time ? new Date(rec.time).toLocaleString() : "N/A"}
                     </td>
 
                     {/* Status */}
                     <td>
-                      <span className="px-3 py-1 bg-green-600/50 border border-green-300/20 rounded-xl text-green-200 text-sm font-medium">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
                         Present
                       </span>
                     </td>

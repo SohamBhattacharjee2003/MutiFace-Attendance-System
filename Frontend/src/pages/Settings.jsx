@@ -175,7 +175,7 @@ export default function AttendanceRecords() {
               <tr>
                 <td colSpan="5" className="py-12 text-center">
                   <div className="text-gray-400">
-                    <div className="text-5xl mb-4">📋</div>
+                    
                     <p className="text-xl font-semibold mb-2">No Attendance Records Found</p>
                     <p className="text-sm">
                       {records.length === 0 
