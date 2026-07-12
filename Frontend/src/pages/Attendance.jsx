@@ -43,7 +43,7 @@ export default function Attendance() {
   };
 
   return (
-    <div className="min-h-screen px-6 md:px-16 mt-24 mb-20 relative overflow-hidden text-white bg-[#070c24]">
+    <div className="min-h-screen w-full mx-auto max-w-[1400px] px-5 sm:px-8 pt-24 pb-16 relative">
 
       {/* Background Glows */}
       <div className="absolute w-[600px] h-[600px] bg-blue-900/20 blur-[200px] -top-32 left-10 rounded-full" />
@@ -53,7 +53,7 @@ export default function Attendance() {
       <motion.h2
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-4xl font-bold text-center tracking-wide"
+        className="text-2xl sm:text-3xl font-bold text-center tracking-wide"
       >
         AI Attendance Scanner
       </motion.h2>

@@ -10,8 +10,9 @@ import { motion } from "framer-motion";
 export default function Aurora({ variant = "full" }) {
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden -z-10">
-      {/* base */}
-      <div className="absolute inset-0 bg-[#05081c]" />
+      {/* No opaque base here: the body already owns the background (index.css). Painting
+          one on top just flattens that gradient and makes this page look like a different
+          app from the rest of the product. */}
 
       {/* drifting colour fields */}
       <motion.div
@@ -64,7 +65,7 @@ export default function Aurora({ variant = "full" }) {
       />
 
       {/* vignette keeps text legible over the colour */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(5,8,28,0.85))]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(5,7,15,0.75))]" />
     </div>
   );
 }

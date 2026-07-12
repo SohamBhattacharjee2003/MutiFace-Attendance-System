@@ -72,30 +72,26 @@ export default function RegisterStudent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#060b23] px-6 md:px-10 pt-24 pb-10 relative overflow-hidden">
-
-      {/* Background Glow */}
-      <div className="absolute w-[900px] h-[900px] bg-blue-900/20 blur-[200px] -top-40 -left-40 rounded-full"></div>
-      <div className="absolute w-[700px] h-[700px] bg-purple-600/10 blur-[200px] bottom-0 right-0 rounded-full"></div>
+    <div className="min-h-screen w-full mx-auto max-w-[1400px] px-5 sm:px-8 pt-24 pb-16 relative">
 
       <motion.h1
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-white text-4xl font-bold mb-12"
+        className="display-lg text-white mb-8"
       >
         Register <span className="text-blue-400">New Student</span>
       </motion.h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
 
         {/* --------- LEFT: CAMERA PANEL --------- */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="relative p-6 bg-white/10 border border-blue-400/40 backdrop-blur-xl rounded-2xl shadow-[0_0_25px_rgba(0,150,255,0.5)]"
+          className="card-glass p-5"
         >
-          <h2 className="text-2xl text-white font-semibold mb-6">
-            Capture Images (5+)
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/90 mb-4">
+            Capture images ({MIN_IMAGES}+ needed)
           </h2>
 
           <div className="rounded-xl overflow-hidden border border-white/20 shadow-lg">
@@ -103,7 +99,7 @@ export default function RegisterStudent() {
           </div>
 
           {/* Image Count */}
-          <p className="mt-4 text-blue-300 font-medium">
+          <p className="mt-4 text-xs text-[--muted]">
             Captured Images: {images.length}
           </p>
 
@@ -113,7 +109,7 @@ export default function RegisterStudent() {
               <motion.img
                 key={i}
                 src={img}
-                className="w-20 h-20 rounded-lg border border-white/20 shadow-[0_0_10px_rgba(255,255,255,0.3)] object-cover"
+                className="h-14 w-14 rounded-lg border border-white/12 object-cover"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
               />
@@ -125,10 +121,10 @@ export default function RegisterStudent() {
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="p-8 bg-white/10 border border-white/20 backdrop-blur-xl rounded-2xl shadow-[0_0_25px_rgba(255,255,255,0.2)]"
+          className="card-glass p-5"
         >
-          <h2 className="text-2xl text-white font-semibold mb-6">
-            Student Details
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-white/90 mb-4">
+            Student details
           </h2>
 
           {/* Name Input */}
@@ -137,7 +133,7 @@ export default function RegisterStudent() {
             placeholder="Enter student name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full p-3 rounded-lg bg-[#0a1130] text-white border border-blue-400/40 focus:ring-2 focus:ring-blue-500 outline-none"
+            className="w-full rounded-lg border border-white/12 bg-black/25 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-[--brand] focus:outline-none"
           />
 
           {/* Register Button */}
@@ -145,14 +141,14 @@ export default function RegisterStudent() {
             whileTap={{ scale: 0.95 }}
             onClick={registerNow}
             disabled={loading}
-            className="mt-6 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-[0_0_20px_rgba(0,150,255,0.5)]"
+            className="mt-5 w-full rounded-lg bg-gradient-to-r from-[--brand] to-indigo-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 transition hover:brightness-110 disabled:opacity-50"
           >
             {loading ? "Registering..." : "Register Student"}
           </motion.button>
 
           {/* Status Message */}
           {msg && (
-            <p className="mt-4 text-center text-blue-300 font-medium">
+            <p className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3 text-center text-xs leading-relaxed text-slate-300">
               {msg}
             </p>
           )}

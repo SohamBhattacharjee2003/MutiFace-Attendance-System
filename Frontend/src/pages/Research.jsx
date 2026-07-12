@@ -44,8 +44,8 @@ const THROUGHPUT = [
   { faces: 8, ms: 934 }, { faces: 16, ms: 1271 },
 ];
 
-const card =
-  "rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl";
+// one surface, shared with every other page (see index.css / components/ui.jsx)
+const card = "card-glass p-5";
 
 const axis = { stroke: "#64748b", fontSize: 12 };
 const tooltipStyle = {
@@ -62,10 +62,10 @@ function Section({ title, kicker, children, delay = 0 }) {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
-      className="mb-8"
+      className="mb-10"
     >
-      <h2 className="text-2xl font-semibold tracking-tight text-white">{title}</h2>
-      {kicker && <p className="mt-1.5 mb-5 max-w-3xl text-sm leading-relaxed text-slate-400">{kicker}</p>}
+      <h2 className="display-lg text-white">{title}</h2>
+      {kicker && <p className="mt-2 mb-5 max-w-2xl text-[13px] leading-relaxed text-[--muted]">{kicker}</p>}
       {children}
     </motion.section>
   );
@@ -73,13 +73,13 @@ function Section({ title, kicker, children, delay = 0 }) {
 
 export default function Research() {
   return (
-    <div className="relative min-h-screen text-slate-100">
+    <div className="relative min-h-screen">
       <Aurora variant="soft" />
 
-      <div className="relative z-10 mx-auto max-w-6xl px-6 py-12">
+      <div className="relative z-10 mx-auto max-w-6xl px-5 py-10 sm:px-8">
         <Link
           to="/"
-          className="mb-10 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
+          className="mb-8 inline-flex items-center gap-2 text-sm text-[--muted] transition hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
@@ -87,17 +87,17 @@ export default function Research() {
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7 }}
-          className="mb-14"
+          className="mb-10"
         >
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-400/30
                           bg-violet-500/10 px-3.5 py-1.5 text-xs font-medium text-violet-300">
             <FlaskConical className="h-3.5 w-3.5" />
             Evaluation
           </div>
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+          <h1 className="display-xl">
             What we measured
           </h1>
-          <p className="mt-4 max-w-3xl text-lg leading-relaxed text-slate-300/90">
+          <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-[--muted]">
             30 simulated students, 66 strangers, held-out test images, and a separate
             calibration split. A face is never scored against a centroid built from that
             same face — that would give 100% and mean nothing.
@@ -257,8 +257,8 @@ export default function Research() {
 
         {/* ── limits ─────────────────────────────────────────────────────── */}
         <Section title="5 · Limitations" delay={0.2}>
-          <div className="rounded-2xl border border-amber-400/25 bg-amber-500/[0.07] p-6 backdrop-blur-xl">
-            <ul className="space-y-2.5 text-sm leading-relaxed text-amber-100/75">
+          <div className="rounded-[--r-lg] border border-amber-400/20 bg-amber-500/[0.06] p-5 backdrop-blur-xl">
+            <ul className="space-y-2.5 text-[13px] leading-relaxed text-amber-100/75">
               <li>
                 <span className="font-semibold text-amber-200">Video replay defeats liveness.</span>{" "}
                 A recorded face genuinely moves. We raise the attack cost from “print a photo” to

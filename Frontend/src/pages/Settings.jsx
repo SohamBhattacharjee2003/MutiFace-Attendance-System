@@ -87,7 +87,7 @@ export default function AttendanceRecords() {
   });
 
   return (
-    <div className="min-h-screen bg-[#060b23] px-6 md:px-12 pt-24 pb-10 relative overflow-hidden">
+    <div className="min-h-screen w-full mx-auto max-w-[1400px] px-5 sm:px-8 pt-24 pb-16 relative">
 
       {/* Background Glow */}
       <div className="absolute w-[650px] h-[650px] bg-blue-900/20 blur-[200px] -top-20 left-20 rounded-full"></div>
@@ -99,7 +99,7 @@ export default function AttendanceRecords() {
           <motion.h1
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-white text-4xl font-bold flex items-center gap-4"
+            className="text-white text-2xl sm:text-3xl font-bold flex items-center gap-4"
           >
             Attendance <span className="text-blue-400">Records</span>
             <span className="text-base bg-blue-600/30 px-4 py-2 rounded-full text-blue-300 font-semibold">

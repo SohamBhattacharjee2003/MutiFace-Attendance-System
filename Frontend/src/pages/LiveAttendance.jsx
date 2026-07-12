@@ -152,7 +152,7 @@ export default function LiveAttendance() {
               position: "absolute",
               top: "-30px",
               left: "0",
-              backgroundColor: "#070c24",
+              backgroundColor: "rgba(10,15,36,0.95)",
               color: "white",
               padding: "4px 12px",
               borderRadius: "4px",
@@ -170,17 +170,17 @@ export default function LiveAttendance() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070c24] pt-20 pb-8 px-4">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen w-full mx-auto max-w-[1400px] px-5 sm:px-8 pt-24 pb-16 relative">
+      <div>
         {/* Header */}
-        <div className="bg-[#070c24] rounded-lg shadow-md p-6 mb-6">
+        <div className="card-glass p-5 mb-5">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex items-center space-x-4">
               <div className="bg-blue-600 p-3 rounded-lg">
                 <Camera className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl lg:text-3xl font-bold text-gray-300">
+                <h1 className="display-lg text-white">
                   Live Face Attendance
                 </h1>
                 <p className="text-white/60 mt-1">
@@ -232,7 +232,7 @@ export default function LiveAttendance() {
         </div>
 
         {/* Video Feed with Face Detection */}
-        <div className="bg-[#070c24] rounded-lg shadow-md p-6">
+        <div className="card-glass p-5">
           <div className="relative w-full overflow-hidden rounded-lg" style={{ aspectRatio: "16/9" }}>
             <video
               ref={videoRef}

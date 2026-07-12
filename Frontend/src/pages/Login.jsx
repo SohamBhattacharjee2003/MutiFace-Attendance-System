@@ -50,17 +50,13 @@ export default function Login() {
   };
 
   return (
-    <div className="h-screen w-full bg-[#060b23] flex items-center justify-center relative overflow-hidden">
-      {/* ===== BACKGROUND GLOW ===== */}
-      <div className="absolute w-[900px] h-[900px] bg-blue-700/20 rounded-full blur-[220px] -top-40 -left-32"></div>
-      <div className="absolute w-[900px] h-[900px] bg-cyan-500/15 rounded-full blur-[260px] bottom-0 right-0"></div>
-
+    <div className="min-h-screen w-full flex items-center justify-center relative px-5 py-16">
       {/* ===== BRAND HEADER ===== */}
       <motion.div
         initial={{ opacity: 0, y: -25 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8 }}
-        className="absolute top-8 w-full flex flex-col items-center z-20"
+        className="absolute top-6 w-full flex flex-col items-center z-20"
       >
         <motion.h1
           animate={{
@@ -71,7 +67,7 @@ export default function Login() {
             ],
           }}
           transition={{ duration: 4, repeat: Infinity }}
-          className="text-white font-extrabold tracking-[4px] text-5xl drop-shadow-lg"
+          className="display-lg text-white tracking-tight"
         >
           Presence<span className="text-blue-500">AI</span>
         </motion.h1>

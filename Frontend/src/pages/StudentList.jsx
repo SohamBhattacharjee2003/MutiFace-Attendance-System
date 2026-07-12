@@ -49,13 +49,13 @@ export default function StudentList() {
   };
 
   return (
-    <div className="min-h-screen bg-[#060b23] px-6 md:px-12 py-10 pt-24 text-white">
+    <div className="min-h-screen w-full mx-auto max-w-[1400px] px-5 sm:px-8 pt-24 pb-16 relative">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
         <motion.h1
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-3xl md:text-4xl font-bold mb-4 md:mb-0"
+          className="text-3xl md:text-2xl sm:text-3xl font-bold mb-4 md:mb-0"
         >
           Student <span className="text-blue-400">List</span>
         </motion.h1>

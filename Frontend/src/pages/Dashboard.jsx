@@ -175,7 +175,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070c24] px-10 py-10 pt-32 relative overflow-hidden">
+    <div className="min-h-screen w-full mx-auto max-w-[1400px] px-5 sm:px-8 pt-24 pb-16 relative">
 
       {/* Dashboard Header */}
       <div className="flex items-center justify-between mb-8">
@@ -183,7 +183,7 @@ export default function Dashboard() {
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-white text-4xl font-bold tracking-wide"
+            className="display-lg text-white"
           >
             PresenceAI <span className="text-blue-400">Dashboard</span>
           </motion.h1>
@@ -234,7 +234,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
         
         {/* LINE CHART */}
-        <div className="bg-white/10 border border-white/20 rounded-2xl p-6 backdrop-blur-xl shadow-lg">
+        <div className="card-glass p-5">
           <h2 className="text-white text-xl mb-4 flex items-center justify-between">
             <span>📊 Attendance Trend</span>
             <span className="text-sm bg-blue-600/30 px-3 py-1 rounded-full text-blue-300">
@@ -284,7 +284,7 @@ export default function Dashboard() {
         </div>
 
         {/* BAR CHART */}
-        <div className="bg-white/10 border border-white/20 rounded-2xl p-6 backdrop-blur-xl shadow-lg">
+        <div className="card-glass p-5">
           <h2 className="text-white text-xl mb-4 flex items-center justify-between">
             <span>📈 Recent Recognition Confidence</span>
             <span className="text-sm bg-cyan-600/30 px-3 py-1 rounded-full text-cyan-300">
@@ -334,7 +334,7 @@ export default function Dashboard() {
 
       {/* DETECTED FACES LIST */}
       {detectedFaces.length > 0 && (
-        <div className="bg-white/10 border border-white/20 rounded-2xl p-6 backdrop-blur-xl mb-10">
+        <div className="card-glass p-5 mb-10">
           <h2 className="text-white text-2xl font-bold mb-6 flex items-center gap-3">
             <span className="text-3xl">🔍</span>
             Detected Faces
@@ -367,7 +367,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* STUDENTS PRESENT TODAY */}
-        <div className="bg-white/10 border border-white/20 rounded-2xl p-6 backdrop-blur-xl">
+        <div className="card-glass p-5">
           <h2 className="text-white text-xl mb-4 flex items-center gap-2">
             ✅ Students Present Today
             <span className="text-sm bg-green-600/30 px-3 py-1 rounded-full text-green-300">
@@ -412,7 +412,7 @@ export default function Dashboard() {
         </div>
 
         {/* RECENT RECOGNITIONS */}
-        <div className="bg-white/10 border border-white/20 rounded-2xl p-6 backdrop-blur-xl">
+        <div className="card-glass p-5">
           <h2 className="text-white text-xl mb-4">📝 Recent Recognitions</h2>
 
           <table className="w-full text-left text-gray-300">
@@ -459,7 +459,7 @@ const StatCard = ({ title, value, icon, color }) => {
       animate={{ opacity: 1, y: 0 }}
       className={`bg-white/10 border border-white/20 backdrop-blur-xl p-6 rounded-2xl text-white ${glow[color]}`}
     >
-      <div className="text-4xl mb-2">{icon}</div>
+      <div className="text-2xl sm:text-3xl mb-2">{icon}</div>
       <h3 className="text-gray-300">{title}</h3>
       <p className="text-3xl font-bold mt-1">{value}</p>
     </motion.div>
