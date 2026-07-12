@@ -139,9 +139,9 @@ def figures(ev, bm):
     rows = ev["ablation"]
     fig, ax = plt.subplots(figsize=(4.6, 2.6))
     x = range(len(rows))
-    ax.bar([i - 0.19 for i in x], [r["far"] for r in rows], 0.38,
+    ax.bar([i - 0.19 for i in x], [r["far"] * 100 for r in rows], 0.38,
            label="Strangers admitted", color=M_BLUE)
-    ax.bar([i + 0.19 for i in x], [r["false_log_rate"] for r in rows], 0.38,
+    ax.bar([i + 0.19 for i in x], [r["false_log_rate"] * 100 for r in rows], 0.38,
            label="Wrong records", color="#8064a2")
     ax.set_xticks(list(x))
     ax.set_xticklabels(["Base", "+ Calib.\nthresh.", "+ Top-2\nmargin", "+ Temporal\nvote"],
@@ -410,7 +410,7 @@ def main():
         ("Face Detection", "RetinaFace / SCRFD  (det_10g)"),
         ("Recognition", "ArcFace ResNet-50 (buffalo_l) → 512-d embedding"),
         ("Runtime", "ONNX Runtime — CPU only, NO GPU"),
-        ("Classifier", "Linear SVM + cosine-to-centroid  (scikit-learn)"),
+        ("Matching", "Nearest-centroid, cosine similarity  (no classifier)"),
         ("Frontend", "React · Vite · TailwindCSS"),
         ("Backend", "Flask REST API  (Bearer-token auth)"),
         ("Storage", "CSV + JSON on disk — no cloud, no database server"),
