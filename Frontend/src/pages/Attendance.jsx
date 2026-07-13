@@ -105,7 +105,7 @@ export default function Attendance() {
   const handleCapture = async (img) => {
     try {
       setLoading(true);
-      const res = await axios.post("http://127.0.0.1:5000/predict", { image: img });
+      const res = await axios.post("/api/predict", { image: img });
       setResults(res.data.results || []);
       setScanned(true);
     } catch (err) {

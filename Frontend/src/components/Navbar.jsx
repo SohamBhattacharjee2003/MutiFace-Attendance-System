@@ -23,10 +23,11 @@ export default function Navbar() {
 
   const menuItems = [
     { name: "Dashboard", path: "/dashboard" },
-    { name: "Register", path: "/register" },
+    { name: "Classes", path: "/api/classes" },
+    { name: "Register", path: "/api/register" },
     { name: "Live", path: "/live" },
-    { name: "Scan", path: "/attendance" },
-    { name: "Students", path: "/students" },
+    { name: "Scan", path: "/api/attendance" },
+    { name: "Students", path: "/api/students" },
     { name: "Records", path: "/attendance-records" },
   ];
 

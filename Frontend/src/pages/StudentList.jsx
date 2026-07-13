@@ -4,7 +4,6 @@ import { RefreshCw, Plus, Camera, Trash2 } from "lucide-react";
 import axios from "axios";
 import AddImagesModal from "../components/AddImagesModal";
 
-const API = "http://127.0.0.1:5000";
 
 export default function StudentList() {
   const [students, setStudents] = useState([]);
@@ -20,7 +19,7 @@ export default function StudentList() {
 
   const fetchStudents = async () => {
     try {
-      const res = await axios.get(`${API}/students`);
+      const res = await axios.get(`/api/students`);
       setStudents(res.data);
     } catch (err) {
       console.error("Error loading students:", err);
@@ -30,7 +29,7 @@ export default function StudentList() {
   const handleDelete = async (name) => {
     if (!window.confirm(`Delete "${name}" and all their training images?`)) return;
     try {
-      await axios.delete(`${API}/students/${encodeURIComponent(name)}`);
+      await axios.delete(`/api/students/${encodeURIComponent(name)}`);
       fetchStudents();
     } catch (err) {
       alert(err.response?.data?.error || "Failed to delete student");

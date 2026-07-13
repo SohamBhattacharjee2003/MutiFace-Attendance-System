@@ -1,0 +1,39 @@
+[
+  {
+    "id": "1a2e5981",
+    "code": "3KrWx_Hz",
+    "name": "IT-B 4th Year",
+    "teacher": "flowtest@presence.ai",
+    "roster": [
+      {
+        "roll": "13000222064",
+        "name": "Souryadeep Deb",
+        "enrolled": false,
+        "images": 0,
+        "enrolled_at": null
+      },
+      {
+        "roll": "13000222065",
+        "name": "Soham Bhattacharya",
+        "enrolled": true,
+        "images": 12,
+        "enrolled_at": "2026-07-13 15:21:55"
+      },
+      {
+        "roll": "13000222066",
+        "name": "Srija Basak",
+        "enrolled": false,
+        "images": 0,
+        "enrolled_at": null
+      },
+      {
+        "roll": "13000222067",
+        "name": "Sneha Singh",
+        "enrolled": false,
+        "images": 0,
+        "enrolled_at": null
+      }
+    ],
+    "created": "2026-07-13 15:21:22"
+  }
+]

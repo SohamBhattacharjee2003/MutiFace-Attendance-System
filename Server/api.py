@@ -55,7 +55,7 @@ import numpy as np
 import joblib
 import liveness
 from PIL import Image
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -120,8 +120,19 @@ if not SECRET_KEY:
         os.chmod(SECRET_KEY_FILE, 0o600)
         print(f"🔑 Generated a signing key → {SECRET_KEY_FILE} (keep it out of git)")
 
-app = Flask(__name__)
+# Flask serves the built React app itself, so the whole product lives on ONE origin.
+# That is what makes a single tunnel (or a single deployment) work: the student's browser
+# fetches the page and calls the API from the same host. Two origins would need CORS, two
+# tunnels, and two URLs to hand out.
+FRONTEND_DIST = os.path.join("..", "Frontend", "dist")
+
+# static_folder=None on purpose. With Flask's built-in static route mounted at "/", it is
+# registered BEFORE our SPA fallback and returns 404 for any path that isn't a real file —
+# so /login, /classes and /enroll/<code> would 404 before React ever sees them. We serve
+# both the assets and the SPA fallback ourselves, below.
+app = Flask(__name__, static_folder=None)
 app.config["SECRET_KEY"] = SECRET_KEY
+app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024   # 20 webcam frames of base64
 CORS(app)
 
 _log_lock = threading.Lock()
@@ -271,9 +282,20 @@ def already_logged_today(student_id, log_path):
         return any(row and row[0] == student_id for row in csv.reader(f))
 
 
+
+
+
 def log_attendance(student_id, confidence, camera="Web"):
-    """Append to today's CSV — once per student per day."""
-    log_path = today_log_path()
+    """
+    Append to today's CSV — once per student per day.
+
+    student_id is a class-scoped key ("<class_code>__<roll>"), so roll 12 in IT-B and
+    roll 12 in CSE-A are different people and land in different files. Attendance is
+    per class, because a college teacher takes several.
+    """
+    import classes as classes_mod
+    class_code, _roll = classes_mod.parse_key(student_id)
+    log_path = (classes_mod.log_path(class_code) if class_code else today_log_path())
     with _log_lock:
         if already_logged_today(student_id, log_path):
             return
@@ -282,7 +304,7 @@ def log_attendance(student_id, confidence, camera="Web"):
         with open(log_path, "a", newline="") as f:
             writer = csv.writer(f)
             if not file_exists:
-                writer.writerow(["StudentID", "Timestamp", "Camera", "Confidence"])
+                writer.writerow(["StudentKey", "Timestamp", "Camera", "Confidence"])
             writer.writerow([student_id, timestamp, camera, f"{confidence:.4f}"])
     print(f"[✅ Attendance] {student_id} ({confidence*100:.1f}%) via {camera}")
 
@@ -422,8 +444,148 @@ def me():
     return jsonify({"user": public_user(user)})
 
 
+# ── Classes, rosters, self-enrolment ─────────────────────────────────────────
+import classes as classes_mod
+
+
+@app.route("/api/classes", methods=["GET", "POST"])
+@require_auth
+def classes_route():
+    user = user_from_request()
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "Class name is required"}), 400
+        return jsonify(classes_mod.create(user["email"], name)), 201
+    return jsonify(classes_mod.list_for(user["email"]))
+
+
+@app.route("/api/classes/<class_id>", methods=["GET", "DELETE"])
+@require_auth
+def class_detail(class_id):
+    user = user_from_request()
+    if request.method == "DELETE":
+        if not classes_mod.delete(class_id, user["email"]):
+            return jsonify({"error": "Class not found"}), 404
+        return jsonify({"status": "success"})
+    cls = classes_mod.get(class_id, user["email"])
+    if not cls:
+        return jsonify({"error": "Class not found"}), 404
+    return jsonify({**cls, **classes_mod.stats(cls)})
+
+
+@app.route("/api/classes/<class_id>/roster", methods=["POST"])
+@require_auth
+def class_roster(class_id):
+    """
+    Bulk-add students. The teacher publishes the roster BEFORE sharing the link —
+    that roster is what stops a stranger with the link from enrolling themselves.
+    """
+    user = user_from_request()
+    data = request.get_json(silent=True) or {}
+    cls = classes_mod.add_to_roster(class_id, user["email"], data.get("students", []))
+    if not cls:
+        return jsonify({"error": "Class not found"}), 404
+    return jsonify({**cls, **classes_mod.stats(cls)})
+
+
+@app.route("/api/classes/<class_id>/roster/<roll>", methods=["DELETE"])
+@require_auth
+def class_roster_remove(class_id, roll):
+    user = user_from_request()
+    cls = classes_mod.remove_from_roster(class_id, user["email"], roll)
+    if not cls:
+        return jsonify({"error": "Class not found"}), 404
+    return jsonify({**cls, **classes_mod.stats(cls)})
+
+
+@app.route("/api/classes/<class_id>/attendance", methods=["GET"])
+@require_auth
+def class_attendance(class_id):
+    user = user_from_request()
+    cls = classes_mod.get(class_id, user["email"])
+    if not cls:
+        return jsonify({"error": "Class not found"}), 404
+    return jsonify(classes_mod.day_report(cls, request.args.get("date")))
+
+
+@app.route("/api/classes/<class_id>/history", methods=["GET"])
+@require_auth
+def class_history(class_id):
+    user = user_from_request()
+    cls = classes_mod.get(class_id, user["email"])
+    if not cls:
+        return jsonify({"error": "Class not found"}), 404
+    return jsonify(classes_mod.history(cls, int(request.args.get("days", 30))))
+
+
+# ── PUBLIC — the student self-enrolment link (no login) ──────────────────────
+@app.route("/api/enroll/<code>", methods=["GET"])
+def enroll_info(code):
+    """What the student sees when they open the shared link."""
+    cls = classes_mod.get_by_code(code)
+    if not cls:
+        return jsonify({"error": "This enrolment link is not valid"}), 404
+    st = classes_mod.stats(cls)
+    return jsonify({
+        "class": cls["name"],
+        "code": cls["code"],
+        # Only unenrolled rolls. A student who already enrolled cannot enrol twice, and
+        # the list doubles as the roster check — a stranger holding the link has no roll
+        # number on it to claim.
+        # NOTE: named `awaiting`, not `pending` — stats() already returns a `pending`
+        # COUNT, and spreading it here would silently overwrite this list with an int.
+        "awaiting": [{"roll": s["roll"], "name": s["name"]}
+                     for s in cls["roster"] if not s["enrolled"]],
+        **st,
+    })
+
+
+@app.route("/api/enroll/<code>", methods=["POST"])
+def enroll_submit(code):
+    """
+    A student enrols themselves: {roll, images[]}.
+
+    No login — but NOT open. The roll number must already be on the roster the teacher
+    published. Someone who merely has the link has no roll number to claim, so they
+    cannot add themselves as a student. Attendance is exactly the thing people cheat,
+    so the roster is the gate.
+    """
+    cls = classes_mod.get_by_code(code)
+    if not cls:
+        return jsonify({"error": "This enrolment link is not valid"}), 404
+
+    data = request.get_json(silent=True) or {}
+    roll = str(data.get("roll", "")).strip()
+    images = data.get("images", [])
+
+    student = classes_mod.on_roster(cls, roll)
+    if not student:
+        return jsonify({"error": f"Roll number {roll} is not on this class roster. "
+                                 f"Ask your teacher to add you."}), 403
+    if student["enrolled"]:
+        return jsonify({"error": f"{student['name']} has already enrolled."}), 409
+    if len(images) < 10:
+        return jsonify({"error": "Please capture at least 10 images"}), 400
+
+    key = classes_mod.student_key(cls["code"], roll)
+    _, total = save_images(key, images)
+    classes_mod.mark_enrolled(cls["code"], roll, total)
+    training = trigger_retrain()
+
+    return jsonify({
+        "status": "success",
+        "name": student["name"],
+        "samples": total,
+        "training": training,
+        "message": f"Thanks {student['name']} — you're enrolled. "
+                   f"The model is training now.",
+    })
+
+
 # ── Face recognition ──────────────────────────────────────────────────────────
-@app.route("/predict", methods=["POST"])
+@app.route("/api/predict", methods=["POST"])
 @require_auth
 def predict():
     if not MODEL_READY:
@@ -531,8 +693,8 @@ def _predict_arcface(rgb):
 
 
 # ── Students ──────────────────────────────────────────────────────────────────
-@app.route("/register", methods=["POST"])
-@app.route("/register-student", methods=["POST"])   # backwards-compatible alias
+@app.route("/api/register", methods=["POST"])
+@app.route("/api/register-student", methods=["POST"])   # backwards-compatible alias
 @require_auth
 def register_student():
     data = request.get_json(silent=True) or {}
@@ -552,7 +714,7 @@ def register_student():
     })
 
 
-@app.route("/update-student", methods=["POST"])
+@app.route("/api/update-student", methods=["POST"])
 @require_auth
 def update_student():
     data = request.get_json(silent=True) or {}
@@ -586,7 +748,7 @@ def is_real_student(name):
     return not trainer.is_impostor(name)
 
 
-@app.route("/students", methods=["GET"])
+@app.route("/api/students", methods=["GET"])
 @require_auth
 def get_students():
     students = []
@@ -600,7 +762,7 @@ def get_students():
     return jsonify(students)
 
 
-@app.route("/students/valid-names", methods=["GET"])
+@app.route("/api/students/valid-names", methods=["GET"])
 @require_auth
 def valid_student_names():
     """Names the active model can actually recognize (are in the classifier)."""
@@ -609,7 +771,7 @@ def valid_student_names():
     return jsonify({"valid_names": names})
 
 
-@app.route("/students/<name>", methods=["DELETE"])
+@app.route("/api/students/<name>", methods=["DELETE"])
 @require_auth
 def delete_student(name):
     save_dir, _ = safe_student_dir(name)
@@ -624,14 +786,14 @@ def delete_student(name):
     })
 
 
-@app.route("/train", methods=["POST"])
+@app.route("/api/train", methods=["POST"])
 @require_auth
 def train():
     """Manually kick off a retrain (registrations already do this automatically)."""
     return jsonify({"status": trigger_retrain(), "state": _train_state})
 
 
-@app.route("/train/status", methods=["GET"])
+@app.route("/api/train/status", methods=["GET"])
 @require_auth
 def train_status():
     """Poll this after registering: status goes idle → training → done."""
@@ -660,13 +822,13 @@ def load_attendance_records():
     return records
 
 
-@app.route("/attendance", methods=["GET"])
+@app.route("/api/attendance", methods=["GET"])
 @require_auth
 def get_attendance():
     return jsonify(load_attendance_records())
 
 
-@app.route("/stats", methods=["GET"])
+@app.route("/api/stats", methods=["GET"])
 @require_auth
 def stats():
     """Live aggregate numbers for the dashboard (single source of truth)."""
@@ -710,7 +872,7 @@ def stats():
     })
 
 
-@app.route("/attendance/clear", methods=["DELETE"])
+@app.route("/api/attendance/clear", methods=["DELETE"])
 @require_auth
 def clear_attendance():
     removed = 0
@@ -721,7 +883,7 @@ def clear_attendance():
     return jsonify({"status": "success", "cleared": removed})
 
 
-@app.route("/health", methods=["GET"])
+@app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({
         "status": "ok",
@@ -730,10 +892,33 @@ def health():
     })
 
 
+# ── Serve the React app (registered last so it never shadows an API route) ────
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def spa(path):
+    """
+    Serve the built frontend. Any unknown path falls back to index.html so React Router
+    can handle it — /enroll/<code> is a client-side route, and a student opening that link
+    cold must not get a 404 from Flask.
+    """
+    full = os.path.join(FRONTEND_DIST, path)
+    if path and os.path.exists(full) and os.path.isfile(full):
+        return send_from_directory(FRONTEND_DIST, path)
+    index = os.path.join(FRONTEND_DIST, "index.html")
+    if not os.path.exists(index):
+        return jsonify({"error": "Frontend not built. Run: cd Frontend && npm run build"}), 404
+    return send_from_directory(FRONTEND_DIST, "index.html")
+
+
 if __name__ == "__main__":
     # debug=True exposes the Werkzeug debugger console. Bound to 0.0.0.0 that is a remote
     # code execution hole for anyone on the same network — strictly worse than the missing
     # auth we just fixed. It must be opt-in and never the default.
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
-    host = os.getenv("HOST", "127.0.0.1" if not debug else "127.0.0.1")
+    # 0.0.0.0 so a tunnel (or another device on the LAN) can reach it. Safe ONLY because
+    # debug is off by default — debug=True on 0.0.0.0 exposes the Werkzeug console, which
+    # is remote code execution for anyone who can reach the port.
+    host = os.getenv("HOST", "0.0.0.0")
+    if debug and host == "0.0.0.0":
+        print("⚠️  FLASK_DEBUG=1 with HOST=0.0.0.0 exposes the debugger. Use HOST=127.0.0.1.")
     app.run(host=host, port=int(os.getenv("PORT", "5000")), debug=debug)

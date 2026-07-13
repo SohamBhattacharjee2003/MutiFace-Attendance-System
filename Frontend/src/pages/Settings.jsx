@@ -11,7 +11,7 @@ export default function AttendanceRecords() {
 
   const loadValidStudents = async () => {
     try {
-      const res = await axios.get("http://127.0.0.1:5000/students/valid-names");
+      const res = await axios.get("/api/students/valid-names");
       const validNames = res.data.valid_names || [];
       setValidStudentNames(validNames);
       console.log("✅ Valid students with embeddings:", validNames);
@@ -25,7 +25,7 @@ export default function AttendanceRecords() {
 
   const fetchRecords = async (validNames = []) => {
     try {
-      const res = await axios.get("http://127.0.0.1:5000/attendance");
+      const res = await axios.get("/api/attendance");
       console.log("📋 Fetched records:", res.data);
       console.log("📋 Total records:", res.data?.length || 0);
       console.log("📋 Valid names to filter:", validNames);

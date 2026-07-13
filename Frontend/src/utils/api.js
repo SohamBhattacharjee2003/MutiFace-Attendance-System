@@ -1,4 +1,8 @@
-const API_URL = "http://localhost:5000";
+// Same-origin by default. In dev, Vite proxies these to the Flask server (vite.config.js);
+// in production Flask serves the built frontend itself, so "" resolves to the right host —
+// including over a Cloudflare tunnel. A hardcoded localhost:5000 would mean "the student's
+// own phone" the moment the link leaves this machine.
+const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 
 // Every data endpoint on the backend now requires a Bearer token. Attendance is the
 // thing people have an incentive to cheat, and these routes used to be wide open —
@@ -29,7 +33,7 @@ export const checkHealth = async () => {
 // User Signup
 export const signup = async (name, email, password) => {
   try {
-    const response = await fetch(`${API_URL}/api/auth/signup`, {
+    const response = await fetch(`${API_URL}/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email, password }),
@@ -57,7 +61,7 @@ export const signup = async (name, email, password) => {
 // User Login
 export const login = async (email, password) => {
   try {
-    const response = await fetch(`${API_URL}/api/auth/login`, {
+    const response = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -88,7 +92,7 @@ export const verifyToken = async () => {
     const token = localStorage.getItem("token");
     if (!token) throw new Error("No token found");
 
-    const response = await fetch(`${API_URL}/api/auth/verify`, {
+    const response = await fetch(`${API_URL}/auth/verify`, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -114,7 +118,7 @@ export const getCurrentUser = async () => {
     const token = localStorage.getItem("token");
     if (!token) throw new Error("No token found");
 
-    const response = await fetch(`${API_URL}/api/auth/me`, {
+    const response = await fetch(`${API_URL}/auth/me`, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -295,4 +299,91 @@ export const clearAttendance = async () => {
     console.error("❌ Clear attendance error:", error);
     throw error;
   }
+};
+
+// ==================== CLASSES ====================
+// A teacher takes several classes; a student in one is not a student in another.
+
+export const getClasses = async () => {
+  const r = await fetch(`${API_URL}/classes`, { headers: authHeaders() });
+  if (!r.ok) throw new Error("Failed to load classes");
+  return r.json();
+};
+
+export const createClass = async (name) => {
+  const r = await fetch(`${API_URL}/classes`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name }),
+  });
+  if (!r.ok) throw new Error((await r.json()).error || "Failed to create class");
+  return r.json();
+};
+
+export const getClass = async (id) => {
+  const r = await fetch(`${API_URL}/classes/${id}`, { headers: authHeaders() });
+  if (!r.ok) throw new Error("Class not found");
+  return r.json();
+};
+
+export const deleteClass = async (id) => {
+  const r = await fetch(`${API_URL}/classes/${id}`, {
+    method: "DELETE", headers: authHeaders(),
+  });
+  if (!r.ok) throw new Error("Failed to delete class");
+  return r.json();
+};
+
+// The roster is the security gate: only rolls the teacher publishes can self-enrol.
+export const addToRoster = async (id, students) => {
+  const r = await fetch(`${API_URL}/classes/${id}/roster`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ students }),
+  });
+  if (!r.ok) throw new Error("Failed to update roster");
+  return r.json();
+};
+
+export const removeFromRoster = async (id, roll) => {
+  const r = await fetch(`${API_URL}/classes/${id}/roster/${roll}`, {
+    method: "DELETE", headers: authHeaders(),
+  });
+  if (!r.ok) throw new Error("Failed to remove student");
+  return r.json();
+};
+
+export const getClassAttendance = async (id, date) => {
+  const q = date ? `?date=${date}` : "";
+  const r = await fetch(`${API_URL}/classes/${id}/attendance${q}`, { headers: authHeaders() });
+  if (!r.ok) throw new Error("Failed to load attendance");
+  return r.json();
+};
+
+export const getClassHistory = async (id, days = 30) => {
+  const r = await fetch(`${API_URL}/classes/${id}/history?days=${days}`, {
+    headers: authHeaders(),
+  });
+  if (!r.ok) throw new Error("Failed to load history");
+  return r.json();
+};
+
+// ==================== PUBLIC SELF-ENROLMENT (no login) ====================
+// The student opens a link the teacher shared. No account, no token.
+
+export const getEnrollInfo = async (code) => {
+  const r = await fetch(`${API_URL}/enroll/${code}`);
+  if (!r.ok) throw new Error((await r.json()).error || "Invalid enrolment link");
+  return r.json();
+};
+
+export const submitEnroll = async (code, roll, images) => {
+  const r = await fetch(`${API_URL}/enroll/${code}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ roll, images }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || "Enrolment failed");
+  return data;
 };

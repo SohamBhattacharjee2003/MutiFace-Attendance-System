@@ -34,7 +34,7 @@ export default function AddImagesModal({ student, onClose }) {
 
     setUploading(true);
     try {
-      const response = await axios.post("http://localhost:5000/update-student", {
+      const response = await axios.post("/api/update-student", {
         name: student.name,
         images: capturedImages,
       });

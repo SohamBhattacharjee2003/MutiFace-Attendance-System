@@ -14,7 +14,7 @@ import {
 
 
 export default function Dashboard() {
-  const API = "http://127.0.0.1:5000";   // BACKEND
+  const API = "";   // BACKEND
 
   const [studentCount, setStudentCount] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
@@ -29,7 +29,7 @@ export default function Dashboard() {
 
   const loadStats = async () => {
     try {
-      const res = await axios.get(`${API}/stats`);
+      const res = await axios.get(`/api/stats`);
       setStats(res.data);
     } catch (err) {
       console.log("❌ Failed to fetch stats:", err);
@@ -60,7 +60,7 @@ export default function Dashboard() {
   /* ------------------ FETCH VALID STUDENTS (with embeddings) ------------------ */
   const loadValidStudents = async () => {
     try {
-      const res = await axios.get(`${API}/students/valid-names`);
+      const res = await axios.get(`/api/students/valid-names`);
       const validNames = res.data.valid_names || [];
       setValidStudentNames(validNames);
       console.log("✅ Valid students with embeddings:", validNames);
@@ -75,7 +75,7 @@ export default function Dashboard() {
   /* ------------------ FETCH TOTAL STUDENTS ------------------ */
   const loadStudents = async (validNames = []) => {
     try {
-      const res = await axios.get(`${API}/students`);
+      const res = await axios.get(`/api/students`);
       console.log("📊 All students from API:", res.data);
       
       // If no validNames provided, just use all students
@@ -98,7 +98,7 @@ export default function Dashboard() {
   const loadAttendance = async (validNames = []) => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API}/attendance`);
+      const res = await axios.get(`/api/attendance`);
       const logs = res.data || [];
       
       console.log("📊 Dashboard loaded attendance data:", logs);

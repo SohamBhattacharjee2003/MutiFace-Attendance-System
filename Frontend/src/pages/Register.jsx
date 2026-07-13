@@ -23,7 +23,7 @@ export default function Register() {
     setMessage("");
 
     try {
-      const res = await API.post("/register/register-student", { name, images });
+      const res = await API.post("/api/register/register-student", { name, images });
 
       setMessage(res.data.message || "Student registered successfully!");
       setImages([]);
