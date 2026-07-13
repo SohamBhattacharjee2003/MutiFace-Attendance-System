@@ -729,9 +729,18 @@ def _predict_arcface(rgb, class_id=None):
         sims = M @ emb
         order = np.argsort(sims)[::-1]
         top1 = float(sims[order[0]])
-        top2 = float(sims[order[1]]) if len(order) > 1 else -1.0
-        margin = top1 - top2
         candidate = names[order[0]]
+
+        # The runner-up must be a DIFFERENT HUMAN. A student enrolled in two classes has
+        # two centroids for the same face, so their own second centroid sits almost on top
+        # of the first — the margin gate then compares them against THEMSELVES, reads a
+        # near-zero gap as "two students who look alike", and refuses. Same roll number =
+        # same person, so skip past them to find a real rival.
+        me = classes_mod.parse_key(candidate)[1]
+        rival = next((i for i in order[1:]
+                      if classes_mod.parse_key(names[i])[1] != me), None)
+        top2 = float(sims[rival]) if rival is not None else -1.0
+        margin = top1 - top2
 
         # gate 2 — nobody we know
         if top1 < cos_thresh:
@@ -744,7 +753,7 @@ def _predict_arcface(rgb, class_id=None):
             results.append({**base, "name": "Uncertain", "confidence": top1,
                             "isKnown": False, "reason": "ambiguous",
                             "candidates": [display_name(candidate)["name"],
-                                           display_name(names[order[1]])["name"]],
+                                           display_name(names[rival])["name"]],
                             "margin": round(margin, 4)})
             continue
 
@@ -990,7 +999,16 @@ def spa(path):
     index = os.path.join(FRONTEND_DIST, "index.html")
     if not os.path.exists(index):
         return jsonify({"error": "Frontend not built. Run: cd Frontend && npm run build"}), 404
-    return send_from_directory(FRONTEND_DIST, "index.html")
+
+    # index.html must NEVER be cached. Its whole job is to name the current bundle
+    # (assets/index-<hash>.js). A cached index keeps pointing at yesterday's hash, so a
+    # rebuilt frontend is invisible until the user manually hard-refreshes — which is how
+    # a fixed bug appears to still be broken. The hashed assets themselves may be cached
+    # forever, because a new build gives them a new name.
+    resp = send_from_directory(FRONTEND_DIST, "index.html")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 if __name__ == "__main__":

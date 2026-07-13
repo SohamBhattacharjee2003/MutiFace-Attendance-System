@@ -43,6 +43,13 @@
     "teacher": "sohambhattacharjee84@gmail.com",
     "roster": [
       {
+        "roll": "13000222029",
+        "name": "Aranb Dua",
+        "enrolled": true,
+        "images": 34,
+        "enrolled_at": "2026-07-13 17:52:37"
+      },
+      {
         "roll": "13000222065",
         "name": "Soham Bhattacharjee",
         "enrolled": true,
