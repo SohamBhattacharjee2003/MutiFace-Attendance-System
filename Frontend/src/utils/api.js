@@ -164,12 +164,15 @@ export const registerStudent = async (name, images) => {
 };
 
 // Predict face from image
-export const predictFace = async (imageBase64) => {
+// classId scopes recognition to the class being taken. Without it, a student enrolled in
+// two classes has two centroids for the same face, and the top-2 margin gate reads that as
+// "two students who look alike" and refuses — so they never get marked.
+export const predictFace = async (imageBase64, classId = null) => {
   try {
     const response = await fetch(`${API_URL}/predict`, {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ image: imageBase64 }),
+      body: JSON.stringify({ image: imageBase64, class_id: classId }),
     });
     
     if (!response.ok) {

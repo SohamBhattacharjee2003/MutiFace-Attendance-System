@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Camera, StopCircle, Video, VideoOff, Play, ScanFace } from "lucide-react";
-import { predictFace } from "../utils/api";
+import { predictFace, getClasses } from "../utils/api";
 import { Card, CardTitle, Badge, Button, Empty } from "../components/ui";
 
 export default function LiveAttendance() {
@@ -13,8 +13,16 @@ export default function LiveAttendance() {
   const [isAttendanceActive, setIsAttendanceActive] = useState(false);
   const [detectedFaces, setDetectedFaces] = useState([]);
   const [cameraOn, setCameraOn] = useState(true);
+  const [classes, setClasses] = useState([]);
+  const [classId, setClassId] = useState("");
+  const classIdRef = useRef("");
+  useEffect(() => { classIdRef.current = classId; }, [classId]);
 
   useEffect(() => {
+    getClasses().then((cs) => {
+      setClasses(cs);
+      if (cs.length === 1) setClassId(cs[0].id);
+    }).catch(console.error);
     startCamera();
     return () => {
       stopCamera();
@@ -57,6 +65,7 @@ export default function LiveAttendance() {
 
   const startAttendance = () => {
     if (!cameraOn) { alert("Turn the camera on first."); return; }
+    if (!classIdRef.current) { alert("Pick a class first — attendance is written to that class's register."); return; }
     setIsAttendanceActive(true);
     setDetectedFaces([]);
 
@@ -95,7 +104,7 @@ export default function LiveAttendance() {
     const base64Image = canvas.toDataURL("image/jpeg", 0.8);
 
     try {
-      const response = await predictFace(base64Image);
+      const response = await predictFace(base64Image, classIdRef.current);
       if (response?.results) {
         setDetectedFaces(response.results);
       }
@@ -204,6 +213,18 @@ export default function LiveAttendance() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={classId}
+              onChange={(e) => setClassId(e.target.value)}
+              disabled={isAttendanceActive}
+              className="rounded-lg border border-white/12 bg-black/25 px-3 py-2 text-sm text-white
+                         focus:border-[--brand] focus:outline-none disabled:opacity-50"
+            >
+              <option value="">Select a class…</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
             {!isAttendanceActive ? (
               <Button onClick={startAttendance} disabled={!cameraOn}>
                 <Play className="h-4 w-4" /> Start attendance

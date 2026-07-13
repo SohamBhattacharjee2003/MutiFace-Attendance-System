@@ -5,7 +5,7 @@ import {
   HelpCircle, ShieldCheck, RotateCcw,
 } from "lucide-react";
 import { Card, CardTitle, Button, Badge, Empty } from "../components/ui";
-import { predictFace } from "../utils/api";
+import { predictFace, getClasses } from "../utils/api";
 
 /**
  * "Point the camera at the room and press the button" attendance.
@@ -29,6 +29,8 @@ const VERDICTS = {
 };
 
 export default function Capture() {
+  const [classes, setClasses] = useState([]);
+  const [classId, setClassId] = useState("");
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -40,6 +42,10 @@ export default function Capture() {
 
   useEffect(() => {
     start();
+    getClasses().then((cs) => {
+      setClasses(cs);
+      if (cs.length === 1) setClassId(cs[0].id);   // one class: no reason to ask
+    }).catch(console.error);
     return () => stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -74,7 +80,7 @@ export default function Capture() {
 
     for (let i = 0; i < BURST_FRAMES; i++) {
       try {
-        const res = await predictFace(grab());
+        const res = await predictFace(grab(), classId);
         (res?.results ?? []).forEach((f) => {
           const key = f.key || f.name;
           // keep the BEST state we ever saw for a face across the burst: once someone is
@@ -106,6 +112,28 @@ export default function Capture() {
           Point the camera at the room and press capture. Everyone in frame is marked at once.
         </p>
       </div>
+
+      <Card pad="p-4" className="mb-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-medium text-[--muted]">Taking attendance for</span>
+          <select
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+            className="rounded-lg border border-white/12 bg-black/25 px-3 py-2 text-sm text-white
+                       focus:border-[--brand] focus:outline-none"
+          >
+            <option value="">Select a class…</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>{c.name} ({c.enrolled} enrolled)</option>
+            ))}
+          </select>
+          {!classId && (
+            <span className="text-[11px] text-amber-300">
+              Pick a class — attendance is written to that class's register.
+            </span>
+          )}
+        </div>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-[1.7fr_1fr] lg:items-start">
         <Card pad="p-3 sm:p-4">
@@ -141,7 +169,7 @@ export default function Capture() {
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button onClick={run} disabled={!cameraOn || busy} className="flex-1">
+            <Button onClick={run} disabled={!cameraOn || busy || !classId} className="flex-1">
               {busy
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Capturing…</>
                 : <><Camera className="h-4 w-4" /> Capture attendance</>}

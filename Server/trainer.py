@@ -191,16 +191,29 @@ def calibrate(centroids, X_imp, X_gen, y_gen):
     imp_top1 = np.array([_top2(M @ e)[0] for e in X_imp])
     cos_threshold = float(np.quantile(imp_top1, 1.0 - TARGET_FAR))
 
-    # keep the margin low enough not to reject genuine faces (5th percentile of the
-    # genuine top1−top2 gap), but never below the floor
+    # Keep the margin low enough not to reject genuine faces (5th percentile of the genuine
+    # top1−top2 gap), but never below the floor.
+    #
+    # The runner-up must be a DIFFERENT PERSON. A student enrolled in two classes has two
+    # centroids for the same face, so their own second centroid sits almost on top of the
+    # first — a gap near zero. Counting that as a "genuine margin" collapsed the calibrated
+    # margin (we measured it fall to 0.043), which silently disarmed the look-alike guard
+    # for everyone. Same roll number = same human, so skip it.
+    def _person(label):
+        return label.split("__", 1)[1] if "__" in label else label
+
     gen_margins = []
     gen_top1 = []
     for e, lab in zip(X_gen, y_gen):
         sims = M @ e
-        t1, t2 = _top2(sims)
+        order = np.argsort(sims)[::-1]
+        t1 = float(sims[order[0]])
         gen_top1.append(t1)
-        if names[int(np.argmax(sims))] == lab:
-            gen_margins.append(t1 - t2)
+        if names[order[0]] != lab:
+            continue
+        rival = next((i for i in order[1:] if _person(names[i]) != _person(lab)), None)
+        if rival is not None:
+            gen_margins.append(t1 - float(sims[rival]))
     margin = (float(np.clip(np.quantile(gen_margins, 0.05), MIN_MARGIN, MAX_MARGIN))
               if gen_margins else MIN_MARGIN)
 

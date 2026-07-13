@@ -1,6 +1,6 @@
 {
   "cos_threshold": 0.1388,
-  "margin": 0.0431,
+  "margin": 0.02,
   "calibrated": true,
   "target_far": 0.01,
   "tar_at_far": 1.0,

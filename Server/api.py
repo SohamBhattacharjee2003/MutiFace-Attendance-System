@@ -637,8 +637,12 @@ def predict():
         return jsonify({"error": "No image received"}), 400
 
     rgb = decode_base64_image(img_b64)
-
-    return jsonify({"results": _predict_arcface(rgb)})
+    # Attendance is taken FOR a class. Scoping to it is not cosmetic:
+    #   * a student enrolled in two classes has two centroids for the SAME face, so the
+    #     top-2 margin gate saw two near-identical scores and cried "Uncertain" — those
+    #     frames never voted, and the student sat on "Pending" forever
+    #   * without a class, a recognised face could be logged against the wrong register
+    return jsonify({"results": _predict_arcface(rgb, data.get("class_id"))})
 
 
 def display_name(key):
@@ -661,7 +665,7 @@ def display_name(key):
     }
 
 
-def _predict_arcface(rgb):
+def _predict_arcface(rgb, class_id=None):
     """
     RetinaFace detect + ArcFace 512-d embedding, then three gates before we are
     willing to put a name on a face:
@@ -683,6 +687,15 @@ def _predict_arcface(rgb):
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
     names = sorted(arcface_centroids) if arcface_centroids else []
+
+    # Restrict the candidate set to the class being taken. Anyone else in the model —
+    # including this same student's enrolment in a DIFFERENT class — is simply not a
+    # candidate here, which is both correct and what removes the false ambiguity.
+    if class_id:
+        cls = classes_mod.get(class_id)
+        if cls:
+            names = [n for n in names if classes_mod.parse_key(n)[0] == cls["code"]]
+
     M = np.stack([arcface_centroids[n] for n in names]) if names else None
     cos_thresh = arcface_thresholds.get("cos_threshold", ARCFACE_COS_THRESHOLD)
     margin_min = arcface_thresholds.get("margin", ARCFACE_MARGIN)
@@ -709,7 +722,8 @@ def _predict_arcface(rgb):
             continue
 
         if M is None:
-            results.append({**base, "name": "Unknown", "confidence": 0.0, "isKnown": False})
+            results.append({**base, "name": "Unknown", "confidence": 0.0, "isKnown": False,
+                            "reason": "no_students_in_class"})
             continue
 
         sims = M @ emb
