@@ -55,7 +55,7 @@ import numpy as np
 import joblib
 import liveness
 from PIL import Image
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file, Response
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -518,6 +518,46 @@ def class_history(class_id):
     if not cls:
         return jsonify({"error": "Class not found"}), 404
     return jsonify(classes_mod.history(cls, int(request.args.get("days", 30))))
+
+
+@app.route("/api/classes/<class_id>/export", methods=["GET"])
+@require_auth
+def class_export(class_id):
+    """
+    Download the attendance report.
+
+        ?format=xlsx     (default) full workbook: Summary + the day-by-day Register
+        ?format=csv      the whole student x day grid
+        ?format=today    just today's register
+
+    Colleges run on spreadsheets. Without an export a teacher retypes the numbers into
+    Excel by hand, which is exactly where attendance errors come from.
+    """
+    import report
+    user = user_from_request()
+    cls = classes_mod.get(class_id, user["email"])
+    if not cls:
+        return jsonify({"error": "Class not found"}), 404
+
+    fmt = request.args.get("format", "xlsx")
+    slug = "".join(ch if ch.isalnum() else "_" for ch in cls["name"]).strip("_")
+    stamp = datetime.now().strftime("%Y-%m-%d")
+
+    if fmt == "xlsx":
+        buf = report.workbook(cls)
+        return send_file(
+            buf, as_attachment=True,
+            download_name=f"{slug}_attendance_{stamp}.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    body = (report.day_csv(cls, request.args.get("date")) if fmt == "today"
+            else report.history_csv(cls))
+    name = f"{slug}_{'today' if fmt == 'today' else 'attendance'}_{stamp}.csv"
+    return Response(
+        body, mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 # ── PUBLIC — the student self-enrolment link (no login) ──────────────────────

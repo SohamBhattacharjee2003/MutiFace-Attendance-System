@@ -406,3 +406,31 @@ export const submitEnroll = async (code, roll, images) => {
   if (!r.ok) throw new Error(data.error || "Enrolment failed");
   return data;
 };
+
+// ==================== REPORT DOWNLOAD ====================
+// The export routes are behind auth, so a plain <a href> would 401 (a link carries no
+// Authorization header). Fetch it with the token, then hand the browser a blob.
+export const downloadReport = async (classId, format = "xlsx") => {
+  const r = await fetch(`${API_URL}/classes/${classId}/export?format=${format}`, {
+    headers: authHeaders(),
+  });
+  if (!r.ok) throw new Error("Could not generate the report");
+
+  const blob = await r.blob();
+  // Flask's send_file writes the filename UNQUOTED (filename=x.xlsx), while our CSV route
+  // quotes it. Match both, or the download silently lands as a generic "attendance.xlsx".
+  const cd = r.headers.get("Content-Disposition") || "";
+  const name =
+    /filename\*?=(?:UTF-8'')?"?([^";]+)"?/.exec(cd)?.[1]?.trim() ||
+    `attendance.${format === "xlsx" ? "xlsx" : "csv"}`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return name;
+};

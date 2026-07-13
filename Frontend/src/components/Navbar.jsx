@@ -27,6 +27,7 @@ export default function Navbar() {
     // would let people be enrolled with no class and no attendance to belong to.
     { name: "Dashboard", path: "/dashboard" },
     { name: "Classes", path: "/classes" },
+    { name: "Capture", path: "/capture" },
     { name: "Live", path: "/live" },
   ];
 

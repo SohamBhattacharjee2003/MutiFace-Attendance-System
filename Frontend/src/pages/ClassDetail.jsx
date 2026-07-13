@@ -4,10 +4,12 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft, Users, UserCheck, CheckCircle2, XCircle, Clock, Copy, Check,
   Link2, CalendarDays, ClipboardList, UserPlus, Trash2, TrendingDown,
+  Download, FileSpreadsheet, Loader2,
 } from "lucide-react";
 import { Card, CardTitle, Button, Badge, Empty } from "../components/ui";
 import {
   getClass, addToRoster, removeFromRoster, getClassAttendance, getClassHistory,
+  downloadReport,
 } from "../utils/api";
 
 const TABS = [
@@ -23,6 +25,14 @@ export default function ClassDetail() {
   const [today, setToday] = useState(null);
   const [hist, setHist] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState("");
+
+  const save = async (fmt) => {
+    setSaving(fmt);
+    try { await downloadReport(id, fmt); }
+    catch (e) { alert(e.message); }
+    setSaving("");
+  };
 
   const load = () => {
     getClass(id).then(setCls).catch(console.error);
@@ -57,12 +67,33 @@ export default function ClassDetail() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/25 p-2">
-            <Link2 className="h-3.5 w-3.5 text-[--brand]" />
-            <code className="max-w-[240px] truncate font-mono text-[11px] text-slate-400">{link}</code>
-            <Button size="sm" variant="ghost" onClick={copy}>
-              {copied ? <><Check className="h-3 w-3 text-emerald-400" />Copied</> : <><Copy className="h-3 w-3" />Share link</>}
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/25 p-2">
+              <Link2 className="h-3.5 w-3.5 text-[--brand]" />
+              <code className="max-w-[180px] truncate font-mono text-[11px] text-slate-400 sm:max-w-[240px]">
+                {link}
+              </code>
+              <Button size="sm" variant="ghost" onClick={copy}>
+                {copied ? <><Check className="h-3 w-3 text-emerald-400" />Copied</> : <><Copy className="h-3 w-3" />Share</>}
+              </Button>
+            </div>
+
+            {/* Colleges run on spreadsheets. Without this a teacher retypes the register
+                into Excel by hand, which is where attendance errors come from. */}
+            <div className="flex gap-1.5">
+              <Button size="sm" onClick={() => save("xlsx")} disabled={!!saving}>
+                {saving === "xlsx"
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                Excel
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => save("csv")} disabled={!!saving}>
+                {saving === "csv"
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Download className="h-3.5 w-3.5" />}
+                CSV
+              </Button>
+            </div>
           </div>
         </div>
       </Card>

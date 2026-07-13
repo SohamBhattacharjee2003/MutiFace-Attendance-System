@@ -9,6 +9,7 @@ import Classes from "./pages/Classes";
 import ClassDetail from "./pages/ClassDetail";
 import Dashboard from "./pages/Dashboard";
 import LiveAttendance from "./pages/LiveAttendance";
+import Capture from "./pages/Capture";
 
 // Navbar
 import Navbar from "./components/Navbar";
@@ -51,6 +52,16 @@ export default function App() {
             <>
               <Navbar />
               <Dashboard />
+            </>
+          }
+        />
+
+        <Route
+          path="/capture"
+          element={
+            <>
+              <Navbar />
+              <Capture />
             </>
           }
         />
