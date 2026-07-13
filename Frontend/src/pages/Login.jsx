@@ -99,18 +99,35 @@ export default function Login() {
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8 }}
-          className="w-[460px] bg-white/10 backdrop-blur-2xl border border-blue-300/20 
-                     p-12 rounded-2xl shadow-[0_0_40px_rgba(0,90,255,0.22)]"
+          className="w-full max-w-[440px] card-glass p-6 sm:p-10"
         >
-          <h2 className="text-white text-center text-3xl font-bold mb-2">
-            {mode === "login" ? "WELCOME" : "CREATE ACCOUNT"}
+          <div className="mb-1.5 flex justify-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/30
+                             bg-sky-500/10 px-2.5 py-1 text-[11px] font-medium text-sky-300">
+              Teacher / Admin
+            </span>
+          </div>
+
+          <h2 className="mb-2 text-center text-2xl font-bold text-white sm:text-3xl">
+            {mode === "login" ? "Sign in" : "Create a teacher account"}
           </h2>
 
-          <p className="text-white/50 text-center mb-10 text-sm">
+          <p className="mb-6 text-center text-sm text-white/50">
             {mode === "login"
-              ? "Access your PresenceAI dashboard."
-              : "Create your new PresenceAI account."}
+              ? "Manage your classes, rosters and attendance."
+              : "You'll create classes and share an enrolment link with your students."}
           </p>
+
+          {/* Students must not sign up here — they enrol from the link their teacher
+              shares, with no account at all. Without this note they land on a signup form
+              and create useless teacher accounts. */}
+          <div className="mb-6 rounded-lg border border-white/10 bg-black/25 p-3">
+            <p className="text-center text-[11px] leading-relaxed text-slate-400">
+              <span className="font-semibold text-slate-300">Are you a student?</span>{" "}
+              You don't need an account. Open the enrolment link your teacher shared and
+              enter your roll number.
+            </p>
+          </div>
 
           {/* === Error Message === */}
           {error && (
@@ -124,27 +141,27 @@ export default function Login() {
           )}
 
           {/* === Toggle Buttons === */}
-          <div className="flex mb-10 gap-2 bg-white/10 p-1 rounded-lg">
+          <div className="mb-6 flex gap-1.5 rounded-lg bg-white/[0.06] p-1">
             <button
               onClick={() => setMode("login")}
-              className={`w-1/2 py-3 rounded-lg transition font-semibold ${
+              className={`w-1/2 rounded-lg py-2.5 text-sm font-semibold transition ${
                 mode === "login"
                   ? "bg-blue-600 text-white"
                   : "text-white/60 hover:text-white"
               }`}
             >
-              Login
+              Sign in
             </button>
 
             <button
               onClick={() => setMode("signup")}
-              className={`w-1/2 py-3 rounded-lg transition font-semibold ${
+              className={`w-1/2 rounded-lg py-2.5 text-sm font-semibold transition ${
                 mode === "signup"
                   ? "bg-blue-600 text-white"
                   : "text-white/60 hover:text-white"
               }`}
             >
-              Signup
+              Create account
             </button>
           </div>
 

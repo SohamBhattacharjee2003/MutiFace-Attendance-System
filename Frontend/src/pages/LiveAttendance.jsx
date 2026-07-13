@@ -180,7 +180,7 @@ export default function LiveAttendance() {
   const logged = detectedFaces.filter((f) => f.logged).length;
 
   return (
-    <div className="min-h-screen w-full mx-auto max-w-[1500px] px-5 sm:px-8 pt-24 pb-16">
+    <div className="min-h-screen w-full mx-auto max-w-[1500px] px-4 pt-20 pb-12 sm:px-6 sm:pt-24 sm:pb-16 lg:px-8">
       {/* header: title + controls on one line — it was a full-height hero before */}
       <Card pad="p-4" className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-4">

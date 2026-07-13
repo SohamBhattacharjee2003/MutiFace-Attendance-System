@@ -22,13 +22,12 @@ export default function Navbar() {
   const user = currentUser();
 
   const menuItems = [
+    // Register + Students are gone: a student is now a row on a class roster who enrols
+    // themselves from the shared link. Keeping a second, class-less way to add students
+    // would let people be enrolled with no class and no attendance to belong to.
     { name: "Dashboard", path: "/dashboard" },
     { name: "Classes", path: "/classes" },
-    { name: "Register", path: "/register" },
     { name: "Live", path: "/live" },
-    { name: "Scan", path: "/attendance" },
-    { name: "Students", path: "/students" },
-    { name: "Records", path: "/attendance-records" },
   ];
 
   const handleLogout = () => {

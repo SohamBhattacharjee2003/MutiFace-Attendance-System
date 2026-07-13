@@ -40,7 +40,7 @@ export default function ClassDetail() {
   };
 
   return (
-    <div className="min-h-screen w-full mx-auto max-w-6xl px-5 sm:px-8 pt-24 pb-16">
+    <div className="min-h-screen w-full mx-auto max-w-6xl px-4 pt-20 pb-12 sm:px-6 sm:pt-24 sm:pb-16 lg:px-8">
       <Link to="/classes" className="mb-5 inline-flex items-center gap-2 text-sm text-[--muted] hover:text-white">
         <ArrowLeft className="h-4 w-4" /> All classes
       </Link>
@@ -68,12 +68,12 @@ export default function ClassDetail() {
       </Card>
 
       {/* tabs */}
-      <div className="mb-4 flex flex-wrap gap-1.5">
+      <div className="scroll-x mb-4 flex gap-1.5 pb-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition
+            className={`inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition sm:px-3.5 sm:text-sm
               ${tab === t.id
                 ? "border-[--brand] bg-[--brand]/15 text-white"
                 : "border-white/10 bg-white/[0.03] text-[--muted] hover:border-white/25 hover:text-white"}`}

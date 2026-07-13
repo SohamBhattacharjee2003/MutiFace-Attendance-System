@@ -8,11 +8,7 @@ import Enroll from "./pages/Enroll";
 import Classes from "./pages/Classes";
 import ClassDetail from "./pages/ClassDetail";
 import Dashboard from "./pages/Dashboard";
-import RegisterStudent from "./pages/RegisterStudent";
 import LiveAttendance from "./pages/LiveAttendance";
-import Attendance from "./pages/Attendance";
-import StudentList from "./pages/StudentList";
-import AttendanceRecords from "./pages/Attendance_Records";
 
 // Navbar
 import Navbar from "./components/Navbar";
@@ -60,41 +56,11 @@ export default function App() {
         />
 
         <Route
-          path="/register"
-          element={
-            <>
-              <Navbar />
-              <RegisterStudent />
-            </>
-          }
-        />
-
-        <Route
           path="/live"
           element={
             <>
               <Navbar />
               <LiveAttendance />
-            </>
-          }
-        />
-
-        <Route
-          path="/attendance"
-          element={
-            <>
-              <Navbar />
-              <Attendance />
-            </>
-          }
-        />
-
-        <Route
-          path="/students"
-          element={
-            <>
-              <Navbar />
-              <StudentList />
             </>
           }
         />

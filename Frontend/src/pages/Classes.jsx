@@ -47,7 +47,7 @@ export default function Classes() {
   };
 
   return (
-    <div className="min-h-screen w-full mx-auto max-w-6xl px-5 sm:px-8 pt-24 pb-16">
+    <div className="min-h-screen w-full mx-auto max-w-6xl px-4 pt-20 pb-12 sm:px-6 sm:pt-24 sm:pb-16 lg:px-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="display-lg text-white">My <span className="text-[--brand]">Classes</span></h1>

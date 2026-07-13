@@ -234,8 +234,8 @@ def fit_and_save(X, y, X_imp=None):
       * a new student becomes one more row, not a retrain — which is why enrolment is 1.4s
     """
     classes = np.unique(y)
-    if len(classes) < 2:
-        raise ValueError(f"need ≥2 enrolled students to train, got {len(classes)}")
+    if len(classes) < 1:
+        raise ValueError("no enrolled students to build a model from")
 
     le = LabelEncoder()
     y_enc = le.fit_transform(y)
@@ -273,11 +273,11 @@ def retrain(dataset=DATASET_DIR, students_only=True, progress=None):
         imp_mask = np.array([is_impostor(n) for n in y])
         X_imp = X[imp_mask]
         X_gen, y_gen = X[~imp_mask], y[~imp_mask]
-        if len(np.unique(y_gen)) < 2:
-            # not enough enrolled students to stand alone — fall back to the full set
-            # rather than refusing to train
+        if len(np.unique(y_gen)) < 1:
+            # nobody has enrolled yet — fall back to the full set so /predict still has
+            # something to load rather than crashing on an empty model
             if progress:
-                progress("Fewer than 2 enrolled students; training on all identities.")
+                progress("No enrolled students yet; using all identities.")
             X_gen, y_gen, X_imp = X, y, np.empty((0, X.shape[1]), dtype=np.float32)
             students_only = False
     else:

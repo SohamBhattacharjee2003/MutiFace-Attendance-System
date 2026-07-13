@@ -1,467 +1,250 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis,
+  CartesianGrid, Tooltip, Cell,
 } from "recharts";
+import {
+  GraduationCap, Users, CheckCircle2, Clock, Plus, ArrowRight,
+  Link2, Camera, TrendingUp,
+} from "lucide-react";
+import { Card, CardTitle, Button, Badge, Empty, Stat, stagger, riseIn } from "../components/ui";
+import { getClasses, getClassAttendance, getClassHistory } from "../utils/api";
 
-
+/**
+ * The dashboard is per-teacher and per-class.
+ *
+ * A teacher with no classes now sees an empty state and the three steps to get started —
+ * not somebody else's leftover demo students, which is what the flat pre-class version
+ * showed. Everything here is derived from that teacher's own classes.
+ */
 export default function Dashboard() {
-  const API = "";   // BACKEND
+  const [classes, setClasses] = useState(null);
+  const [today, setToday] = useState({});
+  const [hist, setHist] = useState({});
 
-  const [studentCount, setStudentCount] = useState(0);
-  const [todayCount, setTodayCount] = useState(0);
-  const [attendanceData, setAttendanceData] = useState([]);
-  const [recentLogs, setRecentLogs] = useState([]);
-  const [presentToday, setPresentToday] = useState([]);
-  const [detectedFaces, setDetectedFaces] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [validStudentNames, setValidStudentNames] = useState([]);
-  const [stats, setStats] = useState(null);
-
-  const loadStats = async () => {
+  const load = async () => {
     try {
-      const res = await axios.get(`/api/stats`);
-      setStats(res.data);
-    } catch (err) {
-      console.log("❌ Failed to fetch stats:", err);
-    }
-  };
-
-  useEffect(() => {
-    // Load data sequentially to avoid race conditions
-    const loadData = async () => {
-      const validNames = await loadValidStudents();
-      await loadStudents(validNames);
-      await loadAttendance(validNames);
-      await loadStats();
-    };
-    
-    loadData();
-    
-    // Auto-refresh every 5 seconds for faster updates
-    const interval = setInterval(() => {
-      console.log("🔄 Auto-refreshing Dashboard data...");
-      loadData();
-    }, 5000);
-    
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /* ------------------ FETCH VALID STUDENTS (with embeddings) ------------------ */
-  const loadValidStudents = async () => {
-    try {
-      const res = await axios.get(`/api/students/valid-names`);
-      const validNames = res.data.valid_names || [];
-      setValidStudentNames(validNames);
-      console.log("✅ Valid students with embeddings:", validNames);
-      return validNames; // Return for sequential use
-    } catch (err) {
-      console.log("❌ Failed to fetch valid student names:", err);
-      setValidStudentNames([]);
-      return [];
-    }
-  };
-
-  /* ------------------ FETCH TOTAL STUDENTS ------------------ */
-  const loadStudents = async (validNames = []) => {
-    try {
-      const res = await axios.get(`/api/students`);
-      console.log("📊 All students from API:", res.data);
-      
-      // If no validNames provided, just use all students
-      if (validNames.length === 0) {
-        setStudentCount(res.data.length || 0);
-        console.log("✅ Student count (all):", res.data.length);
-      } else {
-        // Filter students to only count those with embeddings
-        const validStudents = res.data.filter(student => validNames.includes(student.name));
-        setStudentCount(validStudents.length || 0);
-        console.log("✅ Valid student count:", validStudents.length);
-      }
-    } catch (err) {
-      console.log("❌ Student fetch failed:", err);
-      setStudentCount(0);
-    }
-  };
-
-  /* ------------------ FETCH ATTENDANCE LOGS ------------------ */
-  const loadAttendance = async (validNames = []) => {
-    setLoading(true);
-    try {
-      const res = await axios.get(`/api/attendance`);
-      const logs = res.data || [];
-      
-      console.log("📊 Dashboard loaded attendance data:", logs);
-      console.log("📊 Total records:", logs.length);
-      console.log("📊 Valid names to filter:", validNames);
-      
-      // If no valid names, use all logs; otherwise filter
-      const validLogs = validNames.length === 0 ? logs : logs.filter(log => validNames.includes(log.name));
-      console.log("📊 Displaying records:", validLogs.length);
-
-      /* LAST 5 RECOGNITIONS (validLogs is newest-first from the API) */
-      const recentRecognitions = validLogs.slice(0, 5);
-      setRecentLogs(recentRecognitions);
-      console.log("📝 Recent logs:", recentRecognitions);
-      
-      /* DETECTED FACES - Group by name with latest confidence */
-      const faceMap = {};
-      validLogs.forEach(log => {
-        if (!faceMap[log.name] || new Date(log.time) > new Date(faceMap[log.name].time)) {
-          faceMap[log.name] = log;
-        }
-      });
-      const faces = Object.values(faceMap).map(log => ({
-        name: log.name,
-        confidence: Math.round(log.confidence * 100)
+      const cs = await getClasses();
+      setClasses(cs);
+      const t = {}, h = {};
+      await Promise.all(cs.map(async (c) => {
+        t[c.id] = await getClassAttendance(c.id).catch(() => null);
+        h[c.id] = await getClassHistory(c.id, 14).catch(() => null);
       }));
-      setDetectedFaces(faces);
-
-      /* TODAY'S COUNT - UNIQUE STUDENTS */
-      const today = new Date().toDateString();
-      const todayLogs = validLogs.filter((l) => new Date(l.time).toDateString() === today);
-      const uniqueStudentsToday = new Set(todayLogs.map(log => log.name)).size;
-      setTodayCount(uniqueStudentsToday);
-      
-      /* LIST OF STUDENTS PRESENT TODAY */
-      const uniqueNames = [...new Set(todayLogs.map(log => log.name))];
-      const presentStudents = uniqueNames.map(name => {
-        const studentLogs = todayLogs.filter(l => l.name === name);
-        return {
-          name,
-          time: studentLogs[0].time,
-          confidence: studentLogs[0].confidence
-        };
-      });
-      setPresentToday(presentStudents);
-
-      /* GROUP BY DATE FOR LINECHART */
-      const grouped = {};
-      validLogs.forEach((log) => {
-        // Use YYYY-MM-DD format for proper sorting
-        const date = new Date(log.time);
-        const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
-        grouped[dateKey] = (grouped[dateKey] || 0) + 1;
-      });
-      
-      // Sort by date and format for display
-      const sortedData = Object.entries(grouped)
-        .sort(([dateA], [dateB]) => new Date(dateA) - new Date(dateB))
-        .map(([date, count]) => ({
-          date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          fullDate: date,
-          count
-        }));
-      
-      console.log("📈 Line chart data:", sortedData);
-      setAttendanceData(sortedData);
-      
-      setLastUpdate(new Date());
-    } catch (err) {
-      console.error("❌ Attendance fetch error:", err);
-    } finally {
-      setLoading(false);
-    }
+      setToday(t); setHist(h);
+    } catch (e) { console.error(e); }
   };
+
+  useEffect(() => { load(); const i = setInterval(load, 8000); return () => clearInterval(i); }, []);
+
+  if (!classes) {
+    return <div className="min-h-screen pt-24 text-center text-sm text-[--muted]">Loading…</div>;
+  }
+  if (classes.length === 0) return <FirstRun />;
+
+  const totals = classes.reduce((a, c) => ({
+    students: a.students + c.total,
+    enrolled: a.enrolled + c.enrolled,
+    pending: a.pending + c.pending,
+  }), { students: 0, enrolled: 0, pending: 0 });
+
+  const presentToday = classes.reduce((a, c) => a + (today[c.id]?.present ?? 0), 0);
+
+  const byClass = classes.map((c) => ({
+    name: c.name.length > 14 ? c.name.slice(0, 13) + "…" : c.name,
+    percent: today[c.id]?.percent ?? 0,
+    present: today[c.id]?.present ?? 0,
+  }));
+
+  // one trend line, merged across every class the teacher takes
+  const merged = {};
+  classes.forEach((c) => (hist[c.id]?.daily ?? []).forEach((d) => {
+    merged[d.date] = merged[d.date] || { date: d.date, present: 0, total: 0 };
+    merged[d.date].present += d.present;
+    merged[d.date].total += d.total;
+  }));
+  const trend = Object.values(merged)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((d) => ({ day: d.date.slice(5), percent: d.total ? Math.round(100 * d.present / d.total) : 0 }));
+
+  const axis = { stroke: "#64748b", fontSize: 11 };
+  const tip = { contentStyle: {
+    background: "rgba(10,15,36,0.96)", border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 10, color: "#e2e8f0", fontSize: 12 } };
+  const tone = (p) => (p >= 75 ? "#10b981" : p >= 50 ? "#f59e0b" : "#ef4444");
 
   return (
-    <div className="min-h-screen w-full mx-auto max-w-[1400px] px-5 sm:px-8 pt-24 pb-16 relative">
-
-      {/* Dashboard Header */}
-      <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen w-full mx-auto max-w-6xl px-4 pt-24 pb-16 sm:px-6 lg:px-8">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="display-lg text-white"
-          >
-            PresenceAI <span className="text-blue-400">Dashboard</span>
-          </motion.h1>
-          {lastUpdate && (
-            <p className="text-gray-400 text-sm mt-2">
-              Last updated: {lastUpdate.toLocaleTimeString()} • Auto-refreshing every 5s
-            </p>
-          )}
+          <h1 className="display-lg text-white">Dashboard</h1>
+          <p className="mt-1.5 text-sm text-[--muted]">
+            Across {classes.length} {classes.length === 1 ? "class" : "classes"} · live
+          </p>
         </div>
-        
-        <button
-          onClick={() => {
-            loadStudents();
-            loadAttendance();
-          }}
-          disabled={loading}
-          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Loading...
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refresh Data
-            </>
-          )}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Button as={Link} to="/live" size="sm"><Camera className="h-4 w-4" />Take attendance</Button>
+          <Button as={Link} to="/classes" variant="ghost" size="sm">
+            <GraduationCap className="h-4 w-4" />Classes
+          </Button>
+        </div>
       </div>
 
-      {/* STAT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <StatCard title="Total Students" value={stats?.identities_trained ?? studentCount} icon="👥" color="blue" />
-        <StatCard title="Today's Attendance" value={stats?.present_today ?? todayCount} icon="📅" color="purple" />
-        <StatCard title="Detected Faces" value={detectedFaces.length} icon="🔍" color="cyan" />
-        <StatCard
-          title="Model Accuracy"
-          value={stats?.model_accuracy != null ? `${(stats.model_accuracy * 100).toFixed(1)}%` : "—"}
-          icon="🎯" color="green"
-        />
-      </div>
+      <motion.div variants={stagger} initial="hidden" animate="show"
+                  className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <motion.div variants={riseIn}>
+          <Stat icon={GraduationCap} label="Classes" value={classes.length} tone="brand" />
+        </motion.div>
+        <motion.div variants={riseIn}>
+          <Stat icon={Users} label="On roster" value={totals.students} tone="brand"
+                hint={`${totals.enrolled} have enrolled`} />
+        </motion.div>
+        <motion.div variants={riseIn}>
+          <Stat icon={CheckCircle2} label="Present today" value={presentToday} tone="good"
+                hint={totals.enrolled ? `of ${totals.enrolled} enrolled` : "nobody enrolled yet"} />
+        </motion.div>
+        <motion.div variants={riseIn}>
+          <Stat icon={Clock} label="Yet to enrol" value={totals.pending}
+                tone={totals.pending ? "warn" : "good"}
+                hint={totals.pending ? "share the class link" : "everyone is enrolled"} />
+        </motion.div>
+      </motion.div>
 
-      {/* CHARTS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
-        
-        {/* LINE CHART */}
-        <div className="card-glass p-5">
-          <h2 className="text-white text-xl mb-4 flex items-center justify-between">
-            <span>Attendance Trend</span>
-            <span className="text-sm bg-blue-600/30 px-3 py-1 rounded-full text-blue-300">
-              {attendanceData.length} days
-            </span>
-          </h2>
-          
-          {attendanceData.length === 0 ? (
-            <div className="h-[260px] flex items-center justify-center text-gray-400">
-              No attendance data available
-            </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card pad="p-4 sm:p-5">
+          <CardTitle right={<Badge tone="muted">today</Badge>}>Attendance by class</CardTitle>
+          {byClass.every((c) => !c.present) ? (
+            <Empty icon={Camera} title="No attendance yet today"
+                   sub="Open Live and point the camera at the room." />
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={attendanceData}>
-                <XAxis 
-                  dataKey="date" 
-                  stroke="#aaa" 
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                  tick={{ fill: '#aaa', fontSize: 12 }}
-                />
-                <YAxis 
-                  stroke="#aaa" 
-                  tick={{ fill: '#aaa', fontSize: 12 }}
-                  allowDecimals={false}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'rgba(0,0,0,0.8)', 
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    borderRadius: '8px',
-                    color: 'white'
-                  }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="count" 
-                  stroke="#4f8bff" 
-                  strokeWidth={3}
-                  dot={{ fill: '#4f8bff', r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* BAR CHART */}
-        <div className="card-glass p-5">
-          <h2 className="text-white text-xl mb-4 flex items-center justify-between">
-            <span>📈 Recent Recognition Confidence</span>
-            <span className="text-sm bg-cyan-600/30 px-3 py-1 rounded-full text-cyan-300">
-              Last {recentLogs.length}
-            </span>
-          </h2>
-          
-          {recentLogs.length === 0 ? (
-            <div className="h-[260px] flex items-center justify-center text-gray-400">
-              No recent recognitions
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={recentLogs.map(l => ({
-                name: l.name,
-                confidence: Math.round(l.confidence * 100),
-              }))}>
-                <XAxis 
-                  dataKey="name" 
-                  stroke="#aaa" 
-                  tick={{ fill: '#aaa', fontSize: 12 }}
-                />
-                <YAxis 
-                  stroke="#aaa" 
-                  tick={{ fill: '#aaa', fontSize: 12 }}
-                  domain={[0, 100]}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'rgba(0,0,0,0.8)', 
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    borderRadius: '8px',
-                    color: 'white'
-                  }}
-                  formatter={(value) => [`${value}%`, 'Confidence']}
-                />
-                <Bar 
-                  dataKey="confidence" 
-                  fill="#00d4ff" 
-                  radius={[6, 6, 0, 0]}
-                />
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={byClass} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="name" {...axis} tickLine={false} />
+                <YAxis {...axis} tickLine={false} unit="%" domain={[0, 100]} />
+                <Tooltip {...tip} formatter={(v) => [`${v}%`, "Present"]} />
+                <Bar dataKey="percent" radius={[6, 6, 0, 0]} barSize={42}>
+                  {byClass.map((c, i) => <Cell key={i} fill={tone(c.percent)} />)}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
-        </div>
-      </div>
+        </Card>
 
-      {/* DETECTED FACES LIST */}
-      {detectedFaces.length > 0 && (
-        <div className="card-glass p-5 mb-10">
-          <h2 className="text-white text-2xl font-bold mb-6 flex items-center gap-3">
-            <span className="text-3xl">🔍</span>
-            Detected Faces
-            <span className="text-sm bg-blue-600/30 px-3 py-1 rounded-full text-blue-300">
-              {detectedFaces.length} Total
-            </span>
-          </h2>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {detectedFaces.map((face, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.05 }}
-                className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 hover:border-blue-400/50 transition-all text-center"
-              >
-                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-blue-600 to-cyan-400 rounded-full flex items-center justify-center font-bold text-white text-2xl mb-3 shadow-lg">
-                  {face.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="text-white font-semibold mb-1 truncate">{face.name}</div>
-                <div className="text-blue-300 text-sm font-medium">{face.confidence}%</div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* TWO COLUMN LAYOUT FOR TABLES */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* STUDENTS PRESENT TODAY */}
-        <div className="card-glass p-5">
-          <h2 className="text-white text-xl mb-4 flex items-center gap-2">
-            ✅ Students Present Today
-            <span className="text-sm bg-green-600/30 px-3 py-1 rounded-full text-green-300">
-              {presentToday.length}
-            </span>
-          </h2>
-
-          {presentToday.length === 0 ? (
-            <div className="text-gray-400 text-center py-8">
-              No students present yet today
-            </div>
+        <Card pad="p-4 sm:p-5">
+          <CardTitle right={<Badge tone="muted"><TrendingUp className="h-3 w-3" />14 days</Badge>}>
+            Attendance trend
+          </CardTitle>
+          {trend.length < 2 ? (
+            <Empty icon={TrendingUp} title="Not enough history yet"
+                   sub="The trend appears once attendance has been taken on two or more days." />
           ) : (
-            <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {presentToday.map((student, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-cyan-400 rounded-full flex items-center justify-center font-bold text-white">
-                        {student.name.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="text-white font-semibold">{student.name}</div>
-                        <div className="text-gray-400 text-sm">
-                          {new Date(student.time).toLocaleTimeString()}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-green-400 text-sm font-medium">
-                      {(student.confidence * 100).toFixed(0)}%
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={trend} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="day" {...axis} tickLine={false} />
+                <YAxis {...axis} tickLine={false} unit="%" domain={[0, 100]} />
+                <Tooltip {...tip} formatter={(v) => [`${v}%`, "Present"]} />
+                <Line type="monotone" dataKey="percent" stroke="#4f8bff" strokeWidth={2.5}
+                      dot={{ r: 3, fill: "#4f8bff" }} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
           )}
-        </div>
-
-        {/* RECENT RECOGNITIONS */}
-        <div className="card-glass p-5">
-          <h2 className="text-white text-xl mb-4">📝 Recent Recognitions</h2>
-
-          <table className="w-full text-left text-gray-300">
-            <thead>
-              <tr className="border-b border-white/20 text-gray-400">
-                <th className="py-2">Name</th>
-                <th className="py-2">Time</th>
-                <th className="py-2">Confidence</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {recentLogs.map((log, i) => (
-                <tr key={i} className="border-b border-white/10">
-                  <td className="py-2">{log.name}</td>
-                  <td className="py-2">{new Date(log.time).toLocaleString()}</td>
-                  <td className="py-2">{(log.confidence * 100).toFixed(1)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      
+        </Card>
       </div>
 
+      <h2 className="mb-3 mt-6 text-sm font-semibold uppercase tracking-wide text-white/90">
+        Your classes
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {classes.map((c) => {
+          const t = today[c.id];
+          return (
+            <Card key={c.id} hover pad="p-4">
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <Link to={`/classes/${c.id}`}
+                      className="truncate text-sm font-semibold text-white hover:text-[--brand]">
+                  {c.name}
+                </Link>
+                {t && (
+                  <Badge tone={t.percent >= 75 ? "good" : t.percent >= 50 ? "warn" : "bad"}>
+                    {t.percent}%
+                  </Badge>
+                )}
+              </div>
+              <div className="mb-3 grid grid-cols-3 gap-1.5 text-center">
+                {[["Roster", c.total], ["Enrolled", c.enrolled], ["Present", t?.present ?? 0]]
+                  .map(([k, v]) => (
+                    <div key={k} className="rounded-lg border border-white/10 bg-black/20 p-2">
+                      <div className="text-sm font-bold tabular-nums text-white">{v}</div>
+                      <div className="text-[9px] uppercase tracking-wide text-slate-600">{k}</div>
+                    </div>
+                  ))}
+              </div>
+              {c.pending > 0 && (
+                <p className="mb-2 flex items-center gap-1.5 text-[11px] text-amber-300">
+                  <Link2 className="h-3 w-3" /> {c.pending} still to enrol
+                </p>
+              )}
+              <Button as={Link} to={`/classes/${c.id}`} variant="ghost" size="sm"
+                      className="mt-auto w-full">
+                Open <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-
-/* ----------- Reusable Stat Card Component ----------- */
-const StatCard = ({ title, value, icon, color }) => {
-  const glow = {
-    blue: "shadow-[0_0_20px_rgba(0,150,255,0.4)]",
-    purple: "shadow-[0_0_20px_rgba(150,0,255,0.4)]",
-    cyan: "shadow-[0_0_20px_rgba(0,255,255,0.4)]",
-    green: "shadow-[0_0_20px_rgba(0,255,150,0.4)]",
-    orange: "shadow-[0_0_20px_rgba(255,150,0,0.4)]",
-  };
-
+/* ══════════════════ first run — no classes yet ══════════════════ */
+function FirstRun() {
+  const steps = [
+    { icon: GraduationCap, title: "Create a class",
+      body: "e.g. IT-B 4th Year. Each class keeps its own roster and its own attendance." },
+    { icon: Users, title: "Paste your roster",
+      body: "One line per student — roll number, name. Straight from your spreadsheet." },
+    { icon: Link2, title: "Share the enrolment link",
+      body: "Students open it on their phone and capture their own face. No account needed — and only roll numbers on your roster can use it." },
+  ];
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`bg-white/10 border border-white/20 backdrop-blur-xl p-6 rounded-2xl text-white ${glow[color]}`}
-    >
-      <div className="text-2xl sm:text-3xl mb-2">{icon}</div>
-      <h3 className="text-gray-300">{title}</h3>
-      <p className="text-3xl font-bold mt-1">{value}</p>
-    </motion.div>
+    <div className="min-h-screen w-full mx-auto max-w-3xl px-4 pt-24 pb-16 sm:px-6">
+      <div className="mb-8 text-center">
+        <span className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl
+                         border border-white/10 bg-gradient-to-br from-[--brand]/25 to-violet-500/20">
+          <GraduationCap className="h-6 w-6 text-sky-300" />
+        </span>
+        <h1 className="display-lg text-white">Set up your first class</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm text-[--muted]">
+          Three steps. Students enrol themselves — you never sit through sixty face captures.
+        </p>
+      </div>
+
+      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+        {steps.map((s, i) => (
+          <motion.div key={s.title} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.08 }}>
+            <Card pad="p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md bg-[--brand]
+                                 text-xs font-bold text-white">{i + 1}</span>
+                <s.icon className="h-4 w-4 text-sky-300" />
+              </div>
+              <h3 className="mb-1.5 text-sm font-semibold text-white">{s.title}</h3>
+              <p className="text-[12px] leading-relaxed text-[--muted]">{s.body}</p>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="text-center">
+        <Button as={Link} to="/classes" size="lg">
+          <Plus className="h-4 w-4" /> Create your first class
+        </Button>
+      </div>
+    </div>
   );
-};
+}

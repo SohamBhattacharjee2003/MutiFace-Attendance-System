@@ -601,6 +601,26 @@ def predict():
     return jsonify({"results": _predict_arcface(rgb)})
 
 
+def display_name(key):
+    """
+    The model's label is a class-scoped key ("<class_code>__<roll>") so that roll 12 in
+    IT-B and roll 12 in CSE-A are different people. Nobody wants to SEE that — resolve it
+    back to the student's real name for the UI.
+    """
+    code, roll = classes_mod.parse_key(key)
+    if not code:
+        return {"name": key, "roll": None, "class": None}
+    cls = classes_mod.get_by_code(code)
+    if not cls:
+        return {"name": key, "roll": roll, "class": None}
+    student = classes_mod.on_roster(cls, roll)
+    return {
+        "name": student["name"] if student else roll,
+        "roll": roll,
+        "class": cls["name"],
+    }
+
+
 def _predict_arcface(rgb):
     """
     RetinaFace detect + ArcFace 512-d embedding, then three gates before we are
@@ -669,7 +689,8 @@ def _predict_arcface(rgb):
         if margin < margin_min:
             results.append({**base, "name": "Uncertain", "confidence": top1,
                             "isKnown": False, "reason": "ambiguous",
-                            "candidates": [candidate, names[order[1]]],
+                            "candidates": [display_name(candidate)["name"],
+                                           display_name(names[order[1]])["name"]],
                             "margin": round(margin, 4)})
             continue
 
@@ -678,15 +699,18 @@ def _predict_arcface(rgb):
         # A live face blinks; a printed photo or a still phone screen does not.
         is_live, ear, live_state = liveness.update(candidate, face.get("landmarks"))
         if LIVENESS_REQUIRED and not is_live:
-            results.append({**base, "name": candidate, "confidence": top1,
+            results.append({**base, **display_name(candidate), "key": candidate,
+                            "confidence": top1,
                             "isKnown": True, "logged": False, "live": False,
                             "ear": round(ear, 3) if ear else None,
-                            "reason": live_state,          # "blink_required"
+                            "reason": live_state,          # "checking" / "spoof_suspected"
                             "margin": round(margin, 4)})
             continue
 
+        who = display_name(candidate)
         logged = _vote_and_log(candidate, top1)
-        results.append({**base, "name": candidate, "confidence": top1, "isKnown": True,
+        results.append({**base, **who, "key": candidate,
+                        "confidence": top1, "isKnown": True,
                         "margin": round(margin, 4), "logged": logged, "live": True,
                         "ear": round(ear, 3) if ear else None})
     return results
@@ -739,13 +763,18 @@ def update_student():
 
 def is_real_student(name):
     """
-    The VGGFace2 identities (n000xxx) in processed_dataset are a research cohort — an
-    impostor set used to calibrate the rejection threshold — not people who enrolled.
-    Counting them as "registered students" made the dashboard read "98 students
-    registered, 2 trained", which looks broken and is simply untrue.
+    A real student is one who enrolled through a class link, i.e. has a class-scoped key.
+
+    Excludes two things: the VGGFace2 identities (n000xxx), which are a research impostor
+    cohort and were never people who enrolled; and any legacy flat folder from before
+    classes existed. A teacher with no classes must see an empty dashboard, not somebody
+    else's leftover demo data.
     """
     import trainer
-    return not trainer.is_impostor(name)
+    if trainer.is_impostor(name):
+        return False
+    code, _ = classes_mod.parse_key(name)
+    return code is not None
 
 
 @app.route("/api/students", methods=["GET"])

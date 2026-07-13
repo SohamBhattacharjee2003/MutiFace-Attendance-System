@@ -1,10 +1,10 @@
 {
-  "cos_threshold": 0.1473,
+  "cos_threshold": 0.1295,
   "margin": 0.15,
   "calibrated": true,
   "target_far": 0.01,
   "tar_at_far": 1.0,
   "impostor_embeddings": 2880,
-  "impostor_top1_mean": 0.0264,
-  "impostor_top1_max": 0.2188
+  "impostor_top1_mean": 0.0038,
+  "impostor_top1_max": 0.2015
 }
