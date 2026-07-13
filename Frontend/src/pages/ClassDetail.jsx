@@ -295,12 +295,17 @@ function Roster({ cls, onChange }) {
   const [bulk, setBulk] = useState("");
   const [busy, setBusy] = useState(false);
 
-  /* Accepts pasted lines: "13000222065, Soham Bhattacharya" or tab/space separated.
-     Teachers have this list in a spreadsheet already — typing 60 students one at a
-     time is how a feature goes unused. */
+  /* Accepts pasted lines: "13000222065, Soham Bhattacharya", or tab/space separated.
+     Teachers have this list in a spreadsheet already — typing 60 students one at a time
+     is how a feature goes unused.
+
+     The roll pattern is [^,\t ]+ and NOT \S+ : \S+ is greedy and happily swallows the
+     separating comma, so "13000222065, Soham" stored the roll as "13000222065," — and
+     the student typing "13000222065" then failed the roster check with "you are not on
+     this roster". */
   const parse = (text) =>
     text.split("\n").map((l) => l.trim()).filter(Boolean).map((line) => {
-      const m = line.match(/^(\S+)[,\t ]+(.+)$/);
+      const m = line.match(/^([^,\t ]+)\s*[,\t ]\s*(.+)$/);
       return m ? { roll: m[1].trim(), name: m[2].trim() } : null;
     }).filter(Boolean);
 

@@ -51,6 +51,19 @@ def _save(classes):
         json.dump(classes, f, indent=2)
 
 
+def clean_roll(roll):
+    """
+    Normalise a roll number to exactly what a student will type.
+
+    The client parses pasted roster lines, and a greedy pattern once stored the roll as
+    "13000222065," — comma included. The student then typed "13000222065", the strings did
+    not match, and they were told they were not on the roster. The client is fixed, but a
+    roll number is an identity key: normalise it here too, so no client can ever poison it
+    again. Strips whitespace and any trailing/leading separators.
+    """
+    return str(roll).strip().strip(",;\t ").strip()
+
+
 def student_key(class_code, roll):
     """
     The folder name / model label for one student.
@@ -58,7 +71,7 @@ def student_key(class_code, roll):
     Namespaced by class, so roll 12 in IT-B and roll 12 in CSE-A are different people and
     can never be confused for one another by the recogniser.
     """
-    return f"{class_code}__{str(roll).strip()}"
+    return f"{class_code}__{clean_roll(roll)}"
 
 
 def parse_key(key):
@@ -136,7 +149,7 @@ def add_to_roster(class_id, teacher_email, entries):
             return None
         by_roll = {s["roll"]: s for s in cls["roster"]}
         for e in entries:
-            roll = str(e.get("roll", "")).strip()
+            roll = clean_roll(e.get("roll", ""))
             name = str(e.get("name", "")).strip()
             if not roll or not name:
                 continue
@@ -157,7 +170,7 @@ def remove_from_roster(class_id, teacher_email, roll):
                     and c["teacher"] == teacher_email), None)
         if not cls:
             return None
-        cls["roster"] = [s for s in cls["roster"] if s["roll"] != str(roll)]
+        cls["roster"] = [s for s in cls["roster"] if clean_roll(s["roll"]) != clean_roll(roll)]
         _save(classes)
     return cls
 
@@ -169,8 +182,9 @@ def mark_enrolled(class_code, roll, n_images):
         cls = next((c for c in classes if c["code"] == class_code), None)
         if not cls:
             return None
+        roll = clean_roll(roll)
         for s in cls["roster"]:
-            if s["roll"] == str(roll):
+            if s["roll"] == roll:
                 s["enrolled"] = True
                 s["images"] = n_images
                 s["enrolled_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -181,7 +195,8 @@ def mark_enrolled(class_code, roll, n_images):
 
 def on_roster(cls, roll):
     """The gate on the public link: is this roll number one the teacher published?"""
-    return next((s for s in cls["roster"] if s["roll"] == str(roll).strip()), None)
+    roll = clean_roll(roll)
+    return next((s for s in cls["roster"] if clean_roll(s["roll"]) == roll), None)
 
 
 def stats(cls):
