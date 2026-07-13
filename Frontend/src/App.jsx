@@ -65,15 +65,6 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/attendance-records"
-          element={
-            <>
-              <Navbar />
-              <AttendanceRecords />
-            </>
-          }
-        />
       </Routes>
     </BrowserRouter>
   );
