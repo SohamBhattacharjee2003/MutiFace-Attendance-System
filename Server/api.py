@@ -61,8 +61,21 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
+
+# ── Where state lives ────────────────────────────────────────────────────────
+# Everything the system must NOT lose on a restart — enrolment images, the trained
+# centroids, attendance CSVs, teacher accounts — lives under one root. In development
+# that root is the current directory; in a container it is a MOUNTED VOLUME, so a redeploy
+# or a crash does not wipe every enrolled student.
+#
+#     STATE_DIR=/data python api.py
+STATE_DIR = os.getenv("STATE_DIR", ".")
+
+MODELS_DIR    = os.path.join(STATE_DIR, "models")
+DATASET_DIR   = os.path.join(STATE_DIR, "processed_dataset")
+LOGS_DIR      = os.path.join(STATE_DIR, "logs")
+DATA_DIR      = os.path.join(STATE_DIR, "data")
 # ── Config (mirrors scripts/attendance.py) ────────────────────────────────────
-MODELS_DIR           = "models"
 ARCFACE_LE_FILE      = os.path.join(MODELS_DIR, "arcface_label_encoder.pkl")
 ARCFACE_CENTROIDS    = os.path.join(MODELS_DIR, "arcface_centroids.pkl")
 ARCFACE_THRESHOLDS   = os.path.join(MODELS_DIR, "arcface_thresholds.json")
@@ -91,9 +104,6 @@ VOTE_WINDOW           = 15.0
 # the system claims to prevent. Set LIVENESS=0 in the environment to measure the
 # attack-success baseline (see scripts/test_spoof.py).
 LIVENESS_REQUIRED     = os.getenv("LIVENESS", "1") != "0"
-DATASET_DIR          = "processed_dataset"   # generate_encodings.py reads this
-LOGS_DIR             = "logs"
-DATA_DIR             = "data"
 USERS_FILE           = os.path.join(DATA_DIR, "users.json")
 CONFIDENCE_THRESHOLD = 0.75                   # below this → "Unknown" / not logged
 RECOGNITION_MODEL    = "hog"                  # "hog" (CPU) or "cnn" (GPU)
@@ -124,7 +134,9 @@ if not SECRET_KEY:
 # That is what makes a single tunnel (or a single deployment) work: the student's browser
 # fetches the page and calls the API from the same host. Two origins would need CORS, two
 # tunnels, and two URLs to hand out.
-FRONTEND_DIST = os.path.join("..", "Frontend", "dist")
+# Overridable, because the deploy layout is flat (everything at the repo root)
+# while the dev layout has Server/ and Frontend/ as siblings.
+FRONTEND_DIST = os.getenv("FRONTEND_DIST", os.path.join("..", "Frontend", "dist"))
 
 # static_folder=None on purpose. With Flask's built-in static route mounted at "/", it is
 # registered BEFORE our SPA fallback and returns 404 for any path that isn't a real file —

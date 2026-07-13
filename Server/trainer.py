@@ -24,8 +24,18 @@ from sklearn.preprocessing import LabelEncoder
 
 from arcface_engine import ArcFaceEngine
 
-DATASET_DIR   = "processed_dataset"
-MODELS_DIR    = "models"
+
+# ── Where state lives ────────────────────────────────────────────────────────
+# Everything the system must NOT lose on a restart — enrolment images, the trained
+# centroids, attendance CSVs, teacher accounts — lives under one root. In development
+# that root is the current directory; in a container it is a MOUNTED VOLUME, so a redeploy
+# or a crash does not wipe every enrolled student.
+#
+#     STATE_DIR=/data python api.py
+STATE_DIR = os.getenv("STATE_DIR", ".")
+
+DATASET_DIR   = os.path.join(STATE_DIR, "processed_dataset")
+MODELS_DIR    = os.path.join(STATE_DIR, "models")
 LE_OUT        = os.path.join(MODELS_DIR, "arcface_label_encoder.pkl")
 CENTROIDS_OUT = os.path.join(MODELS_DIR, "arcface_centroids.pkl")
 CACHE_OUT     = os.path.join(MODELS_DIR, "arcface_embedding_cache.pkl")
@@ -186,6 +196,19 @@ def calibrate(centroids, X_imp, X_gen, y_gen):
     M = np.stack([centroids[n] for n in names])
 
     if len(X_imp) == 0:
+        # No impostor cohort present — which is the normal case in DEPLOYMENT, where the
+        # 2,880 VGGFace2 faces are not shipped (they are a research artifact, ~300MB, and
+        # only ever needed to CHOOSE the threshold). Reuse the thresholds already
+        # calibrated against them rather than silently reverting to the hand-picked
+        # defaults, which is what a fresh enrolment on the server would otherwise do.
+        if os.path.exists(THRESH_OUT):
+            try:
+                with open(THRESH_OUT) as f:
+                    existing = json.load(f)
+                if existing.get("calibrated"):
+                    return existing
+            except Exception:      # noqa: BLE001 — a corrupt file must not block enrolment
+                pass
         return dict(DEFAULT_THRESHOLDS)
 
     imp_top1 = np.array([_top2(M @ e)[0] for e in X_imp])

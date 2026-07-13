@@ -1,0 +1,12 @@
+# Replace with your domain. A free one works fine — e.g. duckdns.org.
+# Point it at the server's public IP, then Caddy gets the certificate automatically.
+{$DOMAIN:localhost} {
+	reverse_proxy app:8000
+
+	# Enrolment posts ~15 webcam frames as base64 in one request.
+	request_body {
+		max_size 32MB
+	}
+
+	encode gzip
+}

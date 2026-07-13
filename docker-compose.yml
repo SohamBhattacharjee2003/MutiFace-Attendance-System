@@ -1,0 +1,39 @@
+# PresenceAI — the whole product, plus automatic HTTPS.
+#
+#   docker compose up -d
+#
+# Caddy fetches and renews a Let's Encrypt certificate on its own. HTTPS is not optional:
+# browsers refuse getUserMedia() (the camera) on plain http from any host but localhost —
+# so without a certificate, no student can enrol.
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Signs the auth tokens. Generate once: openssl rand -base64 32
+      # If unset, a key is generated and persisted to the volume; sessions still survive
+      # restarts, but set it explicitly in production.
+      SECRET_KEY: ${SECRET_KEY:-}
+    volumes:
+      - presence-data:/data      # students, attendance, accounts, the trained model
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  presence-data:
+  caddy-data:
+  caddy-config:

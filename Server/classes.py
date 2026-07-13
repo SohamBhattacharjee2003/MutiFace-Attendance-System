@@ -29,10 +29,20 @@ import secrets
 import threading
 from datetime import datetime, timedelta
 
-DATA_DIR = "data"
+
+# ── Where state lives ────────────────────────────────────────────────────────
+# Everything the system must NOT lose on a restart — enrolment images, the trained
+# centroids, attendance CSVs, teacher accounts — lives under one root. In development
+# that root is the current directory; in a container it is a MOUNTED VOLUME, so a redeploy
+# or a crash does not wipe every enrolled student.
+#
+#     STATE_DIR=/data python api.py
+STATE_DIR = os.getenv("STATE_DIR", ".")
+
+DATA_DIR      = os.path.join(STATE_DIR, "data")
+DATASET_DIR   = os.path.join(STATE_DIR, "processed_dataset")
+LOGS_DIR      = os.path.join(STATE_DIR, "logs")
 CLASSES_FILE = os.path.join(DATA_DIR, "classes.json")
-DATASET_DIR = "processed_dataset"
-LOGS_DIR = "logs"
 
 _lock = threading.Lock()
 
