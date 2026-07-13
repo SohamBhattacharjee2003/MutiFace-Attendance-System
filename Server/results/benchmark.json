@@ -1,0 +1,65 @@
+{
+  "memory_mb": 298.5,
+  "cpu_cores": 8,
+  "peak_cpu_percent_of_one_core": 462.8,
+  "throughput": [
+    {
+      "faces_in_frame": 1,
+      "detected": 1,
+      "latency_s": 0.249,
+      "per_face_s": 0.249,
+      "max_fps": 4.01,
+      "cpu_percent": 409.0
+    },
+    {
+      "faces_in_frame": 2,
+      "detected": 2,
+      "latency_s": 0.331,
+      "per_face_s": 0.166,
+      "max_fps": 3.02,
+      "cpu_percent": 422.4
+    },
+    {
+      "faces_in_frame": 4,
+      "detected": 4,
+      "latency_s": 0.548,
+      "per_face_s": 0.137,
+      "max_fps": 1.82,
+      "cpu_percent": 412.2
+    },
+    {
+      "faces_in_frame": 8,
+      "detected": 8,
+      "latency_s": 0.934,
+      "per_face_s": 0.117,
+      "max_fps": 1.07,
+      "cpu_percent": 390.5
+    },
+    {
+      "faces_in_frame": 16,
+      "detected": 16,
+      "latency_s": 1.271,
+      "per_face_s": 0.079,
+      "max_fps": 0.79,
+      "cpu_percent": 462.8
+    }
+  ],
+  "matching": [
+    {
+      "students": 10,
+      "match_ms": 0.0076
+    },
+    {
+      "students": 100,
+      "match_ms": 0.0177
+    },
+    {
+      "students": 1000,
+      "match_ms": 0.0258
+    },
+    {
+      "students": 10000,
+      "match_ms": 1.155
+    }
+  ]
+}

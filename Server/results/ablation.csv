@@ -1,0 +1,5 @@
+config,threshold,margin,voting,accuracy,tar,far,false_log_rate
+"baseline (fixed 0.32, no guards)",0.32,,False,0.8741,0.8741,0.0081,0.0354
++ calibrated threshold,0.3393,,False,0.8667,0.8667,0.002,0.0101
++ top-2 margin,0.3393,0.0784,False,0.863,0.863,0.002,0.0101
++ temporal voting,0.3393,0.0784,True,0.863,0.863,0.002,0.0

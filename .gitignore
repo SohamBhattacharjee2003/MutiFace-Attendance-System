@@ -1,0 +1,19 @@
+
+# auth signing key — never commit
+Server/data/secret.key
+# biometric data and derived models
+Server/processed_dataset/
+Server/logs/*.csv
+Server/logs/*.bak
+# accounts: emails + password hashes — never commit
+Server/data/users.json
+# macOS cruft
+.DS_Store
+**/.DS_Store
+__pycache__/
+*.pyc
+# regenerable embedding cache (large, derived biometric data)
+Server/models/arcface_embedding_cache.pkl
+
+# reference decks, not part of the project
+ppt/
