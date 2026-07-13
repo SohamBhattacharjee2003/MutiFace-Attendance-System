@@ -23,10 +23,14 @@ RUN npm run build
 # ── 2. the server ────────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
-# opencv needs libGL even in headless builds; curl is for the healthcheck
+# libgl/libglib: opencv links them even in headless builds.
+# build-essential + cython: insightface has no prebuilt aarch64 wheel and compiles from
+# source, so an ARM host (Oracle's free tier is ARM) needs a compiler or the build dies
+# halfway through with a wall of gcc errors.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libgl1 libglib2.0-0 curl \
+        libgl1 libglib2.0-0 curl build-essential python3-dev \
     && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir "cython>=3.0" "numpy==2.4.3"
 
 WORKDIR /srv
 
