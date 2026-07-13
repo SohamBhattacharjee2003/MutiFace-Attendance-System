@@ -14,6 +14,11 @@
 set -e
 cd "$(dirname "$0")"
 
+# NOTE: a free Cloudflare quick-tunnel gets a NEW random hostname every run. Restarting
+# this script invalidates any /enroll link already shared — students then hit a 530 from
+# Cloudflare. So: start it ONCE, share the link, and leave it running. To ship a new
+# frontend build you do NOT need to restart: Flask reads Frontend/dist from disk on every
+# request, so `cd Frontend && npm run build` is enough.
 echo "▸ Building the frontend…"
 (cd Frontend && npm run build >/dev/null 2>&1)
 

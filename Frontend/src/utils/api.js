@@ -371,6 +371,11 @@ export const getClassHistory = async (id, days = 30) => {
 // ==================== PUBLIC SELF-ENROLMENT (no login) ====================
 // The student opens a link the teacher shared. No account, no token.
 
+// A roll number is an identity key. Students paste and mistype — trailing commas from a
+// copied spreadsheet cell, stray spaces. Normalise exactly as the server does, so a
+// student is never told "you are not on the roster" over a comma.
+export const cleanRoll = (roll) => String(roll ?? "").trim().replace(/^[,;\s]+|[,;\s]+$/g, "");
+
 export const getEnrollInfo = async (code) => {
   const r = await fetch(`${API_URL}/enroll/${code}`);
   if (!r.ok) throw new Error((await r.json()).error || "Invalid enrolment link");
@@ -381,9 +386,23 @@ export const submitEnroll = async (code, roll, images) => {
   const r = await fetch(`${API_URL}/enroll/${code}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ roll, images }),
+    body: JSON.stringify({ roll: cleanRoll(roll), images }),
   });
-  const data = await r.json();
+
+  // If the server (or the tunnel in front of it) is down, the body is an HTML error page,
+  // not JSON — and r.json() then throws "Unexpected token '<'", which tells the student
+  // nothing. Read it as text first and give them something they can act on.
+  const body = await r.text();
+  let data;
+  try {
+    data = JSON.parse(body);
+  } catch {
+    throw new Error(
+      r.status >= 500
+        ? "The server isn't reachable. The link may have expired — ask your teacher for a fresh one."
+        : "Unexpected response from the server. Please try again."
+    );
+  }
   if (!r.ok) throw new Error(data.error || "Enrolment failed");
   return data;
 };

@@ -7,7 +7,7 @@ import {
 import CameraCapture from "../components/CameraCapture";
 import Aurora from "../components/Aurora";
 import { Card, Button, Badge, Field } from "../components/ui";
-import { getEnrollInfo, submitEnroll } from "../utils/api";
+import { getEnrollInfo, submitEnroll, cleanRoll } from "../utils/api";
 
 /**
  * PUBLIC self-enrolment — the page a student opens from the link their teacher shares.
@@ -36,13 +36,16 @@ export default function Enroll() {
     getEnrollInfo(code).then(setInfo).catch((e) => setError(e.message));
   }, [code]);
 
-  const me = info?.awaiting?.find((s) => s.roll === roll.trim());
+  // Compare on the cleaned value: a student who pastes "13000222065," from a spreadsheet
+  // must still be recognised, rather than being told they are not on the roster.
+  const typed = cleanRoll(roll);
+  const me = info?.awaiting?.find((s) => cleanRoll(s.roll) === typed);
 
   const submit = async () => {
     setBusy(true);
     setError("");
     try {
-      setDone(await submitEnroll(code, roll.trim(), images));
+      setDone(await submitEnroll(code, typed, images));
     } catch (e) {
       setError(e.message);
     }
@@ -126,7 +129,7 @@ export default function Enroll() {
           />
 
           <AnimatePresence mode="wait">
-            {roll.trim() && (
+            {typed && (
               <motion.div
                 key={me ? "ok" : "no"}
                 initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
