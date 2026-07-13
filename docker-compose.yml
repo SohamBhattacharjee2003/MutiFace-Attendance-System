@@ -23,6 +23,11 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    environment:
+      # The Caddyfile reads {$DOMAIN}. Without this line it resolves to the "localhost"
+      # fallback, Caddy never asks Let's Encrypt for a certificate, the site stays on
+      # plain http — and the browser then refuses getUserMedia(), so the camera is dead.
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env, e.g. presenceai.duckdns.org}
     ports:
       - "80:80"
       - "443:443"
