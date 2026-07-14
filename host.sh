@@ -36,6 +36,20 @@ PAGES_URL="https://${REPO_USER}.github.io/${REPO_NAME}"
 echo "▸ Building the frontend…"
 (cd Frontend && npm run build >/dev/null)
 
+# A backend left running from an earlier session still holds :5000. Without this, the one
+# we start below loads the model, then dies on "Address already in use" — and the OLD
+# process keeps serving, silently, with whatever code and model it started with. The app
+# appears to work while ignoring every change you have made since.
+STALE="$(lsof -nP -tiTCP:5000 -sTCP:LISTEN 2>/dev/null || true)"
+if [ -n "$STALE" ]; then
+  echo "▸ Stopping the backend already on :5000 (pid $STALE)…"
+  kill $STALE 2>/dev/null || true
+  for i in $(seq 1 20); do
+    lsof -nP -tiTCP:5000 -sTCP:LISTEN >/dev/null 2>&1 || break
+    sleep 0.25
+  done
+fi
+
 echo "▸ Starting the backend on :5000…"
 (cd Server && ./venv/bin/python api.py) &
 API_PID=$!
@@ -69,9 +83,12 @@ publish() {
 
 echo "▸ Opening the public tunnel…"
 echo
+SHOWN=0
 cloudflared tunnel --url http://localhost:5000 2>&1 | while read -r line; do
-  # cloudflared prints the URL once, buried in its banner — pull it out and show it clearly
-  if [[ "$line" =~ (https://[a-z0-9-]+\.trycloudflare\.com) ]]; then
+  # cloudflared prints its hostname on SEVERAL lines (banner, then log lines). Without the
+  # SHOWN guard we published — and pushed a commit — once per line.
+  if [ "$SHOWN" -eq 0 ] && [[ "$line" =~ (https://[a-z0-9-]+\.trycloudflare\.com) ]]; then
+    SHOWN=1
     URL="${BASH_REMATCH[1]}"
     echo "▸ Publishing it to the permanent link…"
     publish "$URL"
